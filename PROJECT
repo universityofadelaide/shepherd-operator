@@ -1,0 +1,7 @@
+version: "2"
+domain: shepherd
+repo: gitlab.adelaide.edu.au/shepherd-operator
+resources:
+- group: extension
+  version: v1
+  kind: Backup
