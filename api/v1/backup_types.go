@@ -19,6 +19,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type BackupPhase string
+
+const (
+	BackupPhaseNew        BackupPhase = "new"
+	BackupPhaseInProgress BackupPhase = "InProgress"
+	BackupPhaseFailed     BackupPhase = "Failed"
+	BackupPhaseCompleted  BackupPhase = "Completed"
+)
+
 // BackupSpec defines the desired state of Backup
 type BackupSpec struct {
 	// Volumes which will be backed up.
@@ -62,7 +71,10 @@ type BackupSpecMySQLSecretKeys struct {
 
 // BackupStatus defines the observed state of Backup
 type BackupStatus struct {
-
+	StartTime      metav1.Time `json:"startTime,omitempty"`
+	CompletionTime metav1.Time `json:"completionTime,omitempty"`
+	ResticId       string      `json:"resticId,omitempty"`
+	Phase          BackupPhase `json:"phase"`
 }
 
 // +kubebuilder:object:root=true
