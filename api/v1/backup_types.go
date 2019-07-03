@@ -19,19 +19,50 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // BackupSpec defines the desired state of Backup
 type BackupSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Volumes which will be backed up.
+	Volumes map[string]BackupSpecVolume `json:"volumes,omitempty"`
+	// MySQL databases which will be backed up.
+	MySQL map[string]BackupSpecMySQL `json:"mysql,omitempty"`
+}
+
+// BackupSpecVolume defines how to backup volumes.
+type BackupSpecVolume struct {
+	// ClaimName which will be backed up.
+	ClaimName string `json:"claimName"`
+}
+
+// BackupSpecMySQL defines how to backup MySQL.
+type BackupSpecMySQL struct {
+	// Secret which will be used for connectivity.
+	Secret BackupSpecMySQLSecret `json:"secret"`
+}
+
+type BackupSpecMySQLSecret struct {
+	// Name of secret containing the mysql connection details.
+	Name string `json:"name"`
+	// Keys within secret to use for each parameter.
+	Keys BackupSpecMySQLSecretKeys `json:"keys"`
+}
+
+// BackupSpecMySQLSecretKeys defines Secret keys for MySQL connectivity.
+type BackupSpecMySQLSecretKeys struct {
+	// Key which was applied to the application for database connectivity.
+	Username string `json:"username"`
+	// Key which was applied to the application for database connectivity.
+	Password string `json:"password"`
+	// Key which was applied to the application for database connectivity.
+	Database string `json:"database"`
+	// Key which was applied to the application for database connectivity.
+	Hostname string `json:"hostname"`
+	// Key which was applied to the application for database connectivity.
+	Port string `json:"port"`
 }
 
 // BackupStatus defines the observed state of Backup
 type BackupStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+
 }
 
 // +kubebuilder:object:root=true
