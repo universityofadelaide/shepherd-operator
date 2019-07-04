@@ -1,9 +1,26 @@
 apiVersion: extension.shepherd/v1
 kind: Backup
 metadata:
+  name: node-123-backup-xyz
   labels:
-    controller-tools.k8s.io: "1.0"
-  name: backup-sample
+    site: 456
+    environment: 123
 spec:
-  # Add fields here
-  foo: bar
+  volumes:
+    shared:
+      claimName: node-123-shared
+  mysql:
+    default:
+      secret:
+        name: node-123
+        keys:
+          username: DATABASE_USER
+          password: DATABASE_PASSWORD
+          database: DATABASE_NAME
+          hostname: DATABASE_HOST
+          port: DATABASE_PORT
+status:
+  startTime: '2018-11-21T00:16:23Z'
+  completionTime: '2018-11-21T00:16:43Z'
+  resticId: abcd969xcz
+  phase: New|InProgress|Failed|Completed
