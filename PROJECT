@@ -1,0 +1,3 @@
+version: "1"
+domain: shepherd
+repo: gitlab.adelaide.edu.au/web-team/shepherd-operator
