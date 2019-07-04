@@ -18,28 +18,29 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+	metav1_shepherd "gitlab.adelaide.edu.au/shepherd-operator/pkg/apis/meta/v1"
+)
 
 // BackupSpec defines the desired state of Backup
 type BackupSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Volumes which will be backed up.
+	Volumes map[string]metav1_shepherd.SpecVolume `json:"volumes,omitempty"`
+	// MySQL databases which will be backed up.
+	MySQL map[string]metav1_shepherd.SpecMySQL `json:"mysql,omitempty"`
 }
 
 // BackupStatus defines the observed state of Backup
 type BackupStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	StartTime      metav1.Time           `json:"startTime,omitempty"`
+	CompletionTime metav1.Time           `json:"completionTime,omitempty"`
+	ResticID       string                `json:"resticId,omitempty"`
+	Phase          metav1_shepherd.Phase `json:"phase"`
 }
 
-// +genclient
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // Backup is the Schema for the backups API
-// +k8s:openapi-gen=true
 type Backup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -48,7 +49,7 @@ type Backup struct {
 	Status BackupStatus `json:"status,omitempty"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // BackupList contains a list of Backup
 type BackupList struct {
