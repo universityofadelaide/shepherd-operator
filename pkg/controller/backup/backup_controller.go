@@ -18,15 +18,14 @@ package backup
 
 import (
 	"context"
-	"reflect"
+	"fmt"
 
-	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/skpr/operator/pkg/utils/controller/logger"
+	batchv1 "k8s.io/api/batch/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,14 +34,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
+	v1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
+	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/k8s/sync"
+	resticutils "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/restic"
 )
 
-var log = logf.Log.WithName("controller")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
+// ControllerName used for identifying which controller is performing an operation.
+const ControllerName = "backup-restic-controller"
 
 // Add creates a new Backup Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -58,7 +58,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("backup-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(ControllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -69,17 +69,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// TODO(user): Modify this to be the types you create
-	// Uncomment watch a Deployment created by Backup - change this for objects you create
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
+	// Watch for changes in a Job owned by a Backup.
+	return c.Watch(&source.Kind{Type: &batchv1.Job{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &extensionv1.Backup{},
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 var _ reconcile.Reconciler = &ReconcileBackup{}
@@ -92,7 +86,6 @@ type ReconcileBackup struct {
 
 // Reconcile reads that state of the cluster for a Backup object and makes changes based on the state read
 // and what is in the Backup.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  The scaffolding writes
 // a Deployment as an example
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -100,68 +93,73 @@ type ReconcileBackup struct {
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups/status,verbs=get;update;patch
 func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	// Fetch the Backup instance
-	instance := &extensionv1.Backup{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	log := logger.New(ControllerName, request.Namespace, request.Name)
+	log.Info("Starting reconcile loop")
+
+	backup := &extensionv1.Backup{}
+	err := r.Get(context.TODO(), request.NamespacedName, backup)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
+		if kerrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
+
+		return reconcile.Result{}, err
+	}
+	var params = resticutils.PodSpecParams{
+		SiteId:      "test",
+		CPU:         "100m",
+		Memory:      "512Mi",
+		ResticImage: "docker.io/restic/restic:0.9.5",
+		MySQLImage:  "docker.io/library/mariadb:10",
+		WorkingDir:  "/home/shepherd",
+		Tags:        []string{},
+	}
+	spec, err := resticutils.PodSpec(backup, params)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this to be the object type created by your controller
-	// Define the desired Deployment object
-	deploy := &appsv1.Deployment{
+	var (
+		parallelism    int32 = 1
+		completions    int32 = 1
+		activeDeadline int64 = 3600
+		backOffLimit   int32 = 2
+	)
+
+	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name + "-deployment",
-			Namespace: instance.Namespace,
+			Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
+			Namespace: backup.ObjectMeta.Namespace,
 		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"deployment": instance.Name + "-deployment"},
-			},
+		Spec: batchv1.JobSpec{
+			Parallelism:           &parallelism,
+			Completions:           &completions,
+			ActiveDeadlineSeconds: &activeDeadline,
+			BackoffLimit:          &backOffLimit,
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"deployment": instance.Name + "-deployment"}},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "nginx",
-							Image: "nginx",
-						},
-					},
-				},
+				Spec: spec,
 			},
 		},
 	}
-	if err := controllerutil.SetControllerReference(instance, deploy, r.scheme); err != nil {
+
+	log.Info("Syncing Job")
+	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, job, r.scheme))
+	if err != nil {
 		return reconcile.Result{}, err
 	}
+	log.Infof("Synced Job %s with status: %s", job.ObjectMeta.Name, result)
 
-	// TODO(user): Change this for the object type created by your controller
-	// Check if the Deployment already exists
-	found := &appsv1.Deployment{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Create(context.TODO(), deploy)
-		return reconcile.Result{}, err
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// TODO(user): Change this for the object type created by your controller
-	// Update the found object and write the result back if there are any changes
-	if !reflect.DeepEqual(deploy.Spec, found.Spec) {
-		found.Spec = deploy.Spec
-		log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Update(context.TODO(), found)
-		if err != nil {
-			return reconcile.Result{}, err
+	log.Info("Syncing status")
+	if backup.Status == (extensionv1.BackupStatus{}) {
+		status := extensionv1.BackupStatus{
+			Phase:     v1.PhaseNew,
+			StartTime: metav1.Now(),
 		}
+		backup.Status = status
 	}
+
+	log.Info("Reconcile finished")
+
 	return reconcile.Result{}, nil
+
 }
