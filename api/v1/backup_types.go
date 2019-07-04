@@ -17,64 +17,24 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
 
-type BackupPhase string
-
-const (
-	BackupPhaseNew        BackupPhase = "new"
-	BackupPhaseInProgress BackupPhase = "InProgress"
-	BackupPhaseFailed     BackupPhase = "Failed"
-	BackupPhaseCompleted  BackupPhase = "Completed"
+	metav1_shepherd "gitlab.adelaide.edu.au/shepherd-operator/pkg/apis/meta/v1"
 )
 
 // BackupSpec defines the desired state of Backup
 type BackupSpec struct {
 	// Volumes which will be backed up.
-	Volumes map[string]BackupSpecVolume `json:"volumes,omitempty"`
+	Volumes map[string]metav1_shepherd.SpecVolume `json:"volumes,omitempty"`
 	// MySQL databases which will be backed up.
-	MySQL map[string]BackupSpecMySQL `json:"mysql,omitempty"`
-}
-
-// BackupSpecVolume defines how to backup volumes.
-type BackupSpecVolume struct {
-	// ClaimName which will be backed up.
-	ClaimName string `json:"claimName"`
-}
-
-// BackupSpecMySQL defines how to backup MySQL.
-type BackupSpecMySQL struct {
-	// Secret which will be used for connectivity.
-	Secret BackupSpecMySQLSecret `json:"secret"`
-}
-
-type BackupSpecMySQLSecret struct {
-	// Name of secret containing the mysql connection details.
-	Name string `json:"name"`
-	// Keys within secret to use for each parameter.
-	Keys BackupSpecMySQLSecretKeys `json:"keys"`
-}
-
-// BackupSpecMySQLSecretKeys defines Secret keys for MySQL connectivity.
-type BackupSpecMySQLSecretKeys struct {
-	// Key which was applied to the application for database connectivity.
-	Username string `json:"username"`
-	// Key which was applied to the application for database connectivity.
-	Password string `json:"password"`
-	// Key which was applied to the application for database connectivity.
-	Database string `json:"database"`
-	// Key which was applied to the application for database connectivity.
-	Hostname string `json:"hostname"`
-	// Key which was applied to the application for database connectivity.
-	Port string `json:"port"`
+	MySQL map[string]metav1_shepherd.SpecMySQL `json:"mysql,omitempty"`
 }
 
 // BackupStatus defines the observed state of Backup
 type BackupStatus struct {
-	StartTime      metav1.Time `json:"startTime,omitempty"`
-	CompletionTime metav1.Time `json:"completionTime,omitempty"`
-	ResticId       string      `json:"resticId,omitempty"`
-	Phase          BackupPhase `json:"phase"`
+	StartTime      metav1.Time           `json:"startTime,omitempty"`
+	CompletionTime metav1.Time           `json:"completionTime,omitempty"`
+	ResticID       string                `json:"resticId,omitempty"`
+	Phase          metav1_shepherd.Phase `json:"phase"`
 }
 
 // +kubebuilder:object:root=true
