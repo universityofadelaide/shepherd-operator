@@ -2,9 +2,8 @@ apiVersion: extension.shepherd/v1
 kind: Restore
 metadata:
   name: test-restore
-  creationTimestamp: '2018-11-26T01:42:57Z'
   labels:
-    site_id: '123'
+    site: '123'
 spec:
   backupName: abcd969xcz
 status:
