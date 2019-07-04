@@ -19,7 +19,7 @@ package v1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	metav1_shepherd "gitlab.adelaide.edu.au/shepherd-operator/pkg/apis/meta/v1"
+	metav1_shepherd "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
 )
 
 // BackupSpec defines the desired state of Backup
@@ -38,9 +38,11 @@ type BackupStatus struct {
 	Phase          metav1_shepherd.Phase `json:"phase"`
 }
 
-// +kubebuilder:object:root=true
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Backup is the Schema for the backups API
+// +k8s:openapi-gen=true
 type Backup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -49,7 +51,7 @@ type Backup struct {
 	Status BackupStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // BackupList contains a list of Backup
 type BackupList struct {

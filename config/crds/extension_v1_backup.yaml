@@ -27,8 +27,28 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            mysql:
+              description: MySQL databases which will be backed up.
+              type: object
+            volumes:
+              description: Volumes which will be backed up.
+              type: object
           type: object
         status:
+          properties:
+            completionTime:
+              format: date-time
+              type: string
+            phase:
+              type: string
+            resticId:
+              type: string
+            startTime:
+              format: date-time
+              type: string
+          required:
+          - phase
           type: object
   version: v1
 status:

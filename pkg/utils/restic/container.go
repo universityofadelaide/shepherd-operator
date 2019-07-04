@@ -5,7 +5,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/api/v1"
+	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
 )
 
 const (

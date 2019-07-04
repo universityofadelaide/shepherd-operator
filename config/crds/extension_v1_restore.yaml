@@ -27,8 +27,31 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            backupName:
+              description: Name of the backup to restore from.
+              type: string
+            mysql:
+              description: MySQL databases which will be backed up.
+              type: object
+            volumes:
+              description: Volumes which will be backed up.
+              type: object
+          required:
+          - backupName
           type: object
         status:
+          properties:
+            completionTime:
+              format: date-time
+              type: string
+            phase:
+              type: string
+            startTime:
+              format: date-time
+              type: string
+          required:
+          - phase
           type: object
   version: v1
 status:

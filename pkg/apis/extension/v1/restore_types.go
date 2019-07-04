@@ -19,7 +19,7 @@ package v1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	metav1_shepherd "gitlab.adelaide.edu.au/shepherd-operator/pkg/apis/meta/v1"
+	metav1_shepherd "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
 )
 
 // RestoreSpec defines the desired state of Restore
@@ -39,9 +39,11 @@ type RestoreStatus struct {
 	Phase          metav1_shepherd.Phase `json:"phase"`
 }
 
-// +kubebuilder:object:root=true
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Restore is the Schema for the restores API
+// +k8s:openapi-gen=true
 type Restore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -50,7 +52,7 @@ type Restore struct {
 	Status RestoreStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // RestoreList contains a list of Restore
 type RestoreList struct {
