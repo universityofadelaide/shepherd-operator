@@ -5,3 +5,6 @@ resources:
 - group: extension
   version: v1
   kind: Backup
+- group: extension
+  version: v1
+  kind: Restore
