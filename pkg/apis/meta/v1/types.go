@@ -3,7 +3,7 @@ package v1
 type Phase string
 
 const (
-	PhaseNew        Phase = "new"
+	PhaseNew        Phase = "New"
 	PhaseInProgress Phase = "InProgress"
 	PhaseFailed     Phase = "Failed"
 	PhaseCompleted  Phase = "Completed"
