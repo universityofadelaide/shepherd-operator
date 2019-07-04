@@ -1,7 +1,13 @@
 apiVersion: extension.shepherd/v1
 kind: Restore
 metadata:
-  name: restore-sample
+  name: test-restore
+  creationTimestamp: '2018-11-26T01:42:57Z'
+  labels:
+    site_id: '123'
 spec:
-  # Add fields here
-  foo: bar
+  backupName: abcd969xcz
+status:
+  phase: New|InProgress|Failed|Completed
+  startTimestamp: '2018-11-21T00:16:23Z'
+  completionTimestamp: '2018-11-21T00:16:43Z'
