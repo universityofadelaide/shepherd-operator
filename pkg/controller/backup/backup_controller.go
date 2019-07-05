@@ -142,7 +142,7 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	log.Info("Syncing Job")
-	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, job, r.scheme))
+	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, job.Spec, r.scheme))
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -151,8 +151,8 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 	log.Info("Syncing status")
 	if backup.Status == (extensionv1.BackupStatus{}) {
 		status := extensionv1.BackupStatus{
-			Phase:     v1.PhaseNew,
-			StartTime: metav1.Now(),
+			Phase: v1.PhaseNew,
+			//StartTime: metav1.Now(),
 		}
 		backup.Status = status
 	}

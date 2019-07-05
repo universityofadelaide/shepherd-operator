@@ -1,88 +1,50 @@
-/*
-Copyright 2019 University of Adelaide.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package backup
 
 import (
+	"context"
 	"testing"
-	"time"
 
-	"github.com/onsi/gomega"
-	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
-	"golang.org/x/net/context"
-	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis"
+	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
 )
 
-var c client.Client
-
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "default"}}
-var depKey = types.NamespacedName{Name: "foo-deployment", Namespace: "default"}
-
-const timeout = time.Second * 5
-
 func TestReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-	instance := &extensionv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"}}
+	apis.AddToScheme(scheme.Scheme)
 
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
-	// channel when it is finished.
-	mgr, err := manager.New(cfg, manager.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	c = mgr.GetClient()
-
-	recFn, requests := SetupTestReconcile(newReconciler(mgr))
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
-
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
-	// Create the Backup object and expect the Reconcile and Deployment to be created
-	err = c.Create(context.TODO(), instance)
-	// The instance object may not be a valid object because it might be missing some required fields.
-	// Please modify the instance object by adding required fields and then remove the following if statement.
-	if apierrors.IsInvalid(err) {
-		t.Logf("failed to create object, got an invalid object error: %v", err)
-		return
+	instance := &extensionv1.Backup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: corev1.NamespaceDefault,
+		},
+		Spec: extensionv1.BackupSpec{},
 	}
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), instance)
-	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	deploy := &appsv1.Deployment{}
-	g.Eventually(func() error { return c.Get(context.TODO(), depKey, deploy) }, timeout).
-		Should(gomega.Succeed())
+	// Query which will be used to find our Drupal object.
+	query := types.NamespacedName{
+		Name:      instance.ObjectMeta.Name,
+		Namespace: instance.ObjectMeta.Namespace,
+	}
 
-	// Delete the Deployment and expect Reconcile to be called for Deployment deletion
-	g.Expect(c.Delete(context.TODO(), deploy)).NotTo(gomega.HaveOccurred())
-	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
-	g.Eventually(func() error { return c.Get(context.TODO(), depKey, deploy) }, timeout).
-		Should(gomega.Succeed())
+	rd := &ReconcileBackup{
+		Client: fake.NewFakeClient(instance),
+		scheme: scheme.Scheme,
+	}
 
-	// Manually delete Deployment since GC isn't enabled in the test control plane
-	g.Eventually(func() error { return c.Delete(context.TODO(), deploy) }, timeout).
-		Should(gomega.MatchError("deployments.apps \"foo-deployment\" not found"))
+	_, err := rd.Reconcile(reconcile.Request{
+		NamespacedName: query,
+	})
+	assert.Nil(t, err)
+
+	found := &extensionv1.Backup{}
+	err = rd.Client.Get(context.TODO(), query, found)
+	assert.Nil(t, err)
 
 }

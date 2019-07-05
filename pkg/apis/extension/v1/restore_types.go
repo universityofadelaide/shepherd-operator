@@ -34,8 +34,8 @@ type RestoreSpec struct {
 
 // RestoreStatus defines the observed state of Restore
 type RestoreStatus struct {
-	StartTime      metav1.Time           `json:"startTime,omitempty"`
-	CompletionTime metav1.Time           `json:"completionTime,omitempty"`
+	StartTime      *metav1.Time          `json:"startTime,omitempty"`
+	CompletionTime *metav1.Time          `json:"completionTime,omitempty"`
 	Phase          metav1_shepherd.Phase `json:"phase"`
 }
 
