@@ -1,0 +1,23 @@
+apiVersion: aws.skpr.io/v1beta1
+kind: CloudFront
+metadata:
+  name: sample
+spec:
+  aliases:
+    - example1.skpr.io
+    - example2.skpr.io
+  behavior:
+    whitelist:
+      headers:
+        - Accept
+        - Authorization
+        - CloudFront-Forwarded-Proto
+        - Host
+        - User-Agent
+      cookies:
+        - "SESS*"
+        - "SSESS*"
+  origin:
+    endpoint: origin.skpr.io
+    policy: https-only
+    timeout: 60

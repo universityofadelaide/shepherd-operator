@@ -1,0 +1,133 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: ingresses.edge.skpr.io
+spec:
+  group: edge.skpr.io
+  names:
+    kind: Ingress
+    plural: ingresses
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            prometheus:
+              properties:
+                path:
+                  type: string
+                token:
+                  type: string
+              required:
+              - path
+              - token
+              type: object
+            routes:
+              description: Rules which are used to Ingress traffic to an application.
+              properties:
+                primary:
+                  description: Primary domain and routing rule for the application.
+                  properties:
+                    domain:
+                      description: Domain used as part of a route rule.
+                      type: string
+                    subpaths:
+                      description: Supaths included in the route rule.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - domain
+                  - subpaths
+                  type: object
+                secondary:
+                  description: Seconard domains and routing rules for the application.
+                  items:
+                    properties:
+                      domain:
+                        description: Domain used as part of a route rule.
+                        type: string
+                      subpaths:
+                        description: Supaths included in the route rule.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - domain
+                    - subpaths
+                    type: object
+                  type: array
+              required:
+              - primary
+              - secondary
+              type: object
+            service:
+              description: Backend connectivity details.
+              properties:
+                name:
+                  description: Name of the Kubernetes Service object to route traffic
+                    to.
+                  type: string
+                port:
+                  description: Port of the Kubernetes Service object to route traffic
+                    to.
+                  format: int64
+                  type: integer
+              required:
+              - name
+              - port
+              type: object
+            whitelist:
+              description: Whitelist rules for CloudFront.
+              properties:
+                cookies:
+                  description: Cookies which will be forwarded to the application.
+                  items:
+                    type: string
+                  type: array
+                headers:
+                  description: Headers which will used when caching.
+                  items:
+                    type: string
+                  type: array
+              required:
+              - headers
+              - cookies
+              type: object
+          required:
+          - routes
+          - service
+          - prometheus
+          type: object
+        status:
+          properties:
+            observedGeneration:
+              description: Used for determining if an APIs information is up to date.
+              format: int64
+              type: integer
+          type: object
+  version: v1beta1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

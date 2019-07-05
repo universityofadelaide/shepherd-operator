@@ -1,0 +1,57 @@
+version: 2
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - lint
+      - unit
+      - integration
+
+jobs:
+  lint:
+    docker:
+      - image: golang:1.12
+    working_directory: /go/src/github.com/skpr/operator
+    steps:
+      - checkout
+      - run: |
+          go get golang.org/x/lint/golint
+          make lint
+
+  unit:
+    docker:
+      - image: golang:1.12
+    working_directory: /go/src/github.com/skpr/operator
+    environment:
+      GOCACHE: /tmp/go-cache
+      GOFLAGS: -p=8
+    steps:
+      - restore_cache:
+          name: Restoring GOCACHE
+          keys:
+            - gocache-{{ .Branch }}-{{ .Revision }} # Matches when retrying a single run.
+            - gocache-{{ .Branch }}-                # Matches a new commit on an existing branch.
+            - gocache-                              # Matches a new branch.
+      - checkout
+      - run: make test-unit
+      - save_cache:
+          name: Saving GOCACHE
+          key: gocache-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - /tmp/go-cache
+          when: always
+
+  integration:
+    machine: true
+    steps:
+      - checkout
+      - run: |
+          docker pull docker.io/rancher/k3s:v0.4.0
+          docker pull docker.io/library/mariadb:10
+      - run: |
+          docker run -v $(pwd):/go/src/github.com/skpr/operator \
+                     -v /var/run/docker.sock:/var/run/docker.sock \
+                     -w /go/src/github.com/skpr/operator \
+                     --network host \
+                     -it golang:1.12 make test-integration

@@ -1,0 +1,14 @@
+apiVersion: mysql.skpr.io/v1beta1
+kind: Database
+metadata:
+  name: sample
+spec:
+  provisioner: shared # References a controller which will provision the storage.
+  privileges:
+    - ALL
+# status:
+#   hostname: 1.2.3.4
+#   port: 3306
+#   database: sample
+#   username: user
+#   password: password123

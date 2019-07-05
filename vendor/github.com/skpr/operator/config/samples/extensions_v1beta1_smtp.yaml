@@ -1,0 +1,7 @@
+apiVersion: extensions.skpr.io/v1beta1
+kind: SMTP
+metadata:
+  name: sample
+spec:
+  from:
+    address: nick@skpr.io

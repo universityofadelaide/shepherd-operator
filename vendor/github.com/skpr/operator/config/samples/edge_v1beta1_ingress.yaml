@@ -1,0 +1,12 @@
+apiVersion: edge.skpr.io/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: ingress-sample
+spec:
+  service: drupal-sample # Route all the below to this application.
+  routes:
+    - domain: www.example.com
+      subpaths:
+        - "/"

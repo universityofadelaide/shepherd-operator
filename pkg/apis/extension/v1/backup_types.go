@@ -32,8 +32,8 @@ type BackupSpec struct {
 
 // BackupStatus defines the observed state of Backup
 type BackupStatus struct {
-	StartTime      metav1.Time           `json:"startTime,omitempty"`
-	CompletionTime metav1.Time           `json:"completionTime,omitempty"`
+	StartTime      string          		 `json:"startTime,omitempty"`
+	CompletionTime string          		 `json:"completionTime,omitempty"`
 	ResticID       string                `json:"resticId,omitempty"`
 	Phase          metav1_shepherd.Phase `json:"phase"`
 }

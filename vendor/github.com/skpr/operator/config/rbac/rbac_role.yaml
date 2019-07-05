@@ -1,0 +1,144 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - app.skpr.io
+  resources:
+  - drupals
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - app.skpr.io
+  resources:
+  - drupals/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - aws.skpr.io
+  resources:
+  - certificate
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - aws.skpr.io
+  resources:
+  - certificaterequests
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - aws.skpr.io
+  resources:
+  - certificates
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - aws.skpr.io
+  resources:
+  - cloudfronts
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - aws.skpr.io
+  resources:
+  - cloudfronts/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - edge.skpr.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - edge.skpr.io
+  resources:
+  - ingresses/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - mysql.skpr.io
+  resources:
+  - databaseclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - mysql.skpr.io
+  resources:
+  - databaseclaims/status
+  verbs:
+  - get
+  - update
+  - patch

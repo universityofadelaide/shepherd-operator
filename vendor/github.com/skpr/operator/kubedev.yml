@@ -1,0 +1,46 @@
+namespace: skpr-operator
+
+# Common mounts for all applications.
+mounts:
+  code:
+    source: /go
+    target: /go
+
+pods:
+  ingress:
+    image: alpine:3.9
+    serviceAccount: admin
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "edge", "ingress", "local"]
+
+  drupal:
+    image: alpine:3.9
+    serviceAccount: admin
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "app", "drupal"]
+
+  database:
+    image: alpine:3.9
+    serviceAccount: admin
+    env:
+      - name:  SKPR_MYSQL_PROVISIONER_NAME
+        value: nonprod
+      - name:  SKPR_MYSQL_HOSTNAME
+        value: mysql.skpr-operator
+      - name:  SKPR_MYSQL_PORT
+        value: "3306"
+      - name:  SKPR_MYSQL_USERNAME
+        value: root
+      - name:  SKPR_MYSQL_PASSWORD
+        value: password
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "mysql", "shared"]
+
+  restic:
+    image: alpine:3.9
+    serviceAccount: admin
+    env:
+      - name: SKPR_BACKUP_RESTIC_BUCKET
+        value: s3:http://minio.minio:9000
+      - name: AWS_ACCESS_KEY_ID
+        value: minio
+      - name: AWS_SECRET_ACCESS_KEY
+        value: minio123
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "backup", "restic"]

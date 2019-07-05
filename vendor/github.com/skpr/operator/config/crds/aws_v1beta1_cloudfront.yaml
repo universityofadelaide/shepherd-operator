@@ -1,0 +1,129 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: cloudfronts.aws.skpr.io
+spec:
+  group: aws.skpr.io
+  names:
+    kind: CloudFront
+    plural: cloudfronts
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            aliases:
+              description: Aliases which CloudFront will respond to.
+              items:
+                type: string
+              type: array
+            behavior:
+              description: Behavior applied to this CloudFront distribution eg. Headers
+                and Cookies.
+              properties:
+                whitelist:
+                  description: Whitelist of headers and cookies.
+                  properties:
+                    cookies:
+                      description: Cookies which will be forwarded to the application.
+                      items:
+                        type: string
+                      type: array
+                    headers:
+                      description: Headers which will used when caching.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - headers
+                  - cookies
+                  type: object
+              required:
+              - whitelist
+              type: object
+            certificate:
+              description: Certificate which is applied to this CloudFront distribution.
+              properties:
+                arn:
+                  description: Machine identifier for referencing a certificate.
+                  type: string
+              required:
+              - arn
+              type: object
+            firewall:
+              description: Firewall configuration for this CloudFront distribution.
+              properties:
+                arn:
+                  description: Machine identifier for referencing a firewall.
+                  type: string
+              required:
+              - arn
+              type: object
+            origin:
+              description: Information CloudFront uses to connect to the backend.
+              properties:
+                endpoint:
+                  description: Backend connection information for CloudFront.
+                  type: string
+                policy:
+                  description: Backend connection information for CloudFront.
+                  type: string
+                timeout:
+                  description: How long CloudFront should wait before timing out.
+                  format: int64
+                  type: integer
+              required:
+              - endpoint
+              - policy
+              - timeout
+              type: object
+          required:
+          - aliases
+          - behavior
+          - origin
+          type: object
+        status:
+          properties:
+            arn:
+              description: Machine identifier for querying the CloudFront distribution.
+              type: string
+            domainName:
+              description: DomainName for creating CNAME records.
+              type: string
+            observedGeneration:
+              description: Used for determining if an APIs information is up to date.
+              format: int64
+              type: integer
+            runningInvalidations:
+              description: How many invalidations are currently running.
+              format: int64
+              type: integer
+            state:
+              description: Current state of the CloudFront distribution.
+              type: string
+          type: object
+  version: v1beta1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
