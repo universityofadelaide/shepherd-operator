@@ -2,11 +2,12 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
+# Disable go modules (use dep)
+export GO111MODULE=off
+
 all: test manager
 
 preflight:
-	# Disable go modules (use dep)
-	export GO111MODULE=off
 	# Ensure kubebuilder 1.x is in use.
 	kubebuilder version | grep 'KubeBuilderVersion:"1'
 
