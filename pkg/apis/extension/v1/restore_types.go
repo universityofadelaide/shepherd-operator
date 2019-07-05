@@ -44,6 +44,7 @@ type RestoreStatus struct {
 
 // Restore is the Schema for the restores API
 // +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
 type Restore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
