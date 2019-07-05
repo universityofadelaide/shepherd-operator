@@ -4,6 +4,12 @@ IMG ?= controller:latest
 
 all: test manager
 
+preflight:
+	# Disable go modules (use dep)
+	export GO111MODULE=off
+	# Ensure kubebuilder 1.x is in use.
+	kubebuilder version | grep 'KubeBuilderVersion:"1'
+
 # Run tests
 test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
@@ -38,7 +44,7 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate:
+generate: preflight
 ifndef GOPATH
 	$(error GOPATH not defined, please define GOPATH. Run "go help gopath" to learn more about GOPATH)
 endif
@@ -53,3 +59,5 @@ docker-build: test
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+.PHONY: preflight
