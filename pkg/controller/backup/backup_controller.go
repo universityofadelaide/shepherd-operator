@@ -1,31 +1,22 @@
-/*
-Copyright 2019 University of Adelaide.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package backup
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/go-test/deep"
+	"github.com/pkg/errors"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
+	v1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
+	"io/ioutil"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
-	v1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
 	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/k8s/sync"
 	resticutils "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/restic"
 )
@@ -51,7 +41,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileBackup{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileBackup{
+		Config: mgr.GetConfig(),
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -80,15 +74,18 @@ var _ reconcile.Reconciler = &ReconcileBackup{}
 // ReconcileBackup reconciles a Backup object
 type ReconcileBackup struct {
 	client.Client
+	Config *rest.Config
 	scheme *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Backup object and makes changes based on the state read
 // and what is in the Backup.Spec
 // a Deployment as an example
-// Automatically generate RBAC rules to allow the Controller to read and write Deployments
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get;update;patch
+// Automatically generate RBAC rules to allow the Controller to read and write Jobs.
+// +kubebuilder:rbac:groups=v1,resources=pods,verbs=get;list
+// +kubebuilder:rbac:groups=v1,resources=pods/log,verbs=get
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups/status,verbs=get;update;patch
 func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -104,8 +101,18 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 
 		return reconcile.Result{}, err
 	}
+
+	// Backup has completed or failed, return early.
+	if backup.Status.Phase == v1.PhaseCompleted || backup.Status.Phase == v1.PhaseFailed {
+		return reconcile.Result{}, nil
+	}
+
+	if _, found := backup.ObjectMeta.GetLabels()["site"]; !found {
+		// @todo add some info to the status identifying the backup failed
+		log.Info(fmt.Sprintf("Backup %s doesn't have a site label, skipping.", backup.ObjectMeta.Name))
+		return reconcile.Result{}, nil
+	}
 	var params = resticutils.PodSpecParams{
-		SiteId:      "test",
 		CPU:         "100m",
 		Memory:      "512Mi",
 		ResticImage: "docker.io/restic/restic:0.9.5",
@@ -113,7 +120,7 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 		WorkingDir:  "/home/shepherd",
 		Tags:        []string{},
 	}
-	spec, err := resticutils.PodSpec(backup, params)
+	spec, err := resticutils.PodSpecBackup(backup, params, backup.ObjectMeta.GetLabels()["site"])
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -142,23 +149,103 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	log.Info("Syncing Job")
-	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, job.Spec, r.scheme))
+	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, r.scheme))
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 	log.Infof("Synced Job %s with status: %s", job.ObjectMeta.Name, result)
 
 	log.Info("Syncing status")
-	if backup.Status == (extensionv1.BackupStatus{}) {
-		status := extensionv1.BackupStatus{
-			Phase: v1.PhaseNew,
-			//StartTime: metav1.Now(),
+	status := extensionv1.BackupStatus{
+		Phase:          v1.PhaseNew,
+		StartTime:      job.Status.StartTime,
+		CompletionTime: job.Status.CompletionTime,
+	}
+
+	if job.Status.Active > 0 {
+		status.Phase = v1.PhaseInProgress
+	} else {
+		if job.Status.Succeeded > 0 {
+			resticId, err := getResticIdFromJob(r.Config, job)
+			if err != nil {
+				return reconcile.Result{}, errors.Wrap(err, "failed to parse resticId")
+			}
+
+			if resticId != "" {
+				status.ResticID = resticId
+				status.Phase = v1.PhaseCompleted
+			} else {
+				status.Phase = v1.PhaseFailed
+			}
 		}
+		if job.Status.Failed > 0 {
+			status.Phase = v1.PhaseFailed
+		}
+	}
+
+	if diff := deep.Equal(backup.Status, status); diff != nil {
+		log.Info(fmt.Sprintf("Status change dectected: %s", diff))
+
 		backup.Status = status
+
+		err := r.Status().Update(context.TODO(), backup)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed to update status")
+		}
 	}
 
 	log.Info("Reconcile finished")
 
 	return reconcile.Result{}, nil
+}
 
+// getResticIdFromJob parses output from a job's pods and returns a restic ID from the logs.
+func getResticIdFromJob(c *rest.Config, job *batchv1.Job) (string, error) {
+	kubeset, err := kubernetes.NewForConfig(c)
+	var resticId string
+
+	if err != nil {
+		return resticId, err
+	}
+
+	pods, err := kubeset.CoreV1().Pods(job.ObjectMeta.Namespace).List(metav1.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set(job.Spec.Template.ObjectMeta.Labels)).String(),
+	})
+	if err != nil {
+		return resticId, err
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != corev1.PodSucceeded {
+			continue
+		}
+		podLogs, err := getPodLogs(kubeset, pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
+		if err != nil {
+			return resticId, err
+		}
+		resticId = resticutils.ParseSnapshotID(podLogs)
+		if resticId != "" {
+			return resticId, nil
+		}
+	}
+
+	return resticId, nil
+}
+
+// getPodLogs gets the logs from the restic container from a pod as a string.
+func getPodLogs(kubeset *kubernetes.Clientset, namespace string, podName string) (string, error) {
+	body, err := kubeset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: resticutils.ResticBackupContainerName,
+	}).Stream()
+	if err != nil {
+		return "", err
+	}
+	defer body.Close()
+
+	podLogs, err := ioutil.ReadAll(body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(podLogs), nil
 }

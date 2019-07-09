@@ -27,7 +27,7 @@ func TestReconcile(t *testing.T) {
 		Spec: extensionv1.BackupSpec{},
 	}
 
-	// Query which will be used to find our Drupal object.
+	// Query which will be used to find our Backup object.
 	query := types.NamespacedName{
 		Name:      instance.ObjectMeta.Name,
 		Namespace: instance.ObjectMeta.Namespace,
@@ -46,5 +46,4 @@ func TestReconcile(t *testing.T) {
 	found := &extensionv1.Backup{}
 	err = rd.Client.Get(context.TODO(), query, found)
 	assert.Nil(t, err)
-
 }

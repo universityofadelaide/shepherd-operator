@@ -8,10 +8,9 @@ import (
 )
 
 // Job function to ensure the Object is in sync.
-func Job(parent metav1.Object, spec batchv1.JobSpec, scheme *runtime.Scheme) controllerutil.MutateFn {
+func Job(parent metav1.Object, scheme *runtime.Scheme) controllerutil.MutateFn {
 	return func(obj runtime.Object) error {
 		job := obj.(*batchv1.Job)
-		job.Spec = spec
 		return controllerutil.SetControllerReference(parent, job, scheme)
 	}
 }

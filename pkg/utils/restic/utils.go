@@ -3,6 +3,7 @@ package restic
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // Helper function to format tags.
@@ -13,11 +14,11 @@ func formatTags(tags []string) string {
 		line = fmt.Sprintf("%s --tag=%s", line, tag)
 	}
 
-	return line
+	return strings.Trim(line, " ")
 }
 
 // Helper function for parsing the snapshot id from restic backup output.
-func parseSnapshotID(input string) string {
+func ParseSnapshotID(input string) string {
 	// Restic IDs are SHA-256 hashes and the output contains the 8 character short version.
 	var r = regexp.MustCompile(`snapshot\s([A-Fa-f0-9]{8})\ssaved`)
 	match := r.FindStringSubmatch(input)
