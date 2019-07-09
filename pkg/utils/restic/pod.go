@@ -2,14 +2,14 @@ package restic
 
 import (
 	"fmt"
-	v1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
+	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
+	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/helper"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/helper"
 	"strings"
 )
 

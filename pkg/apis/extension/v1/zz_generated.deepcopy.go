@@ -20,7 +20,7 @@ limitations under the License.
 package v1
 
 import (
-	metav1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
+	metav1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 

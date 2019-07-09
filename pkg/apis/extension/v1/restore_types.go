@@ -19,7 +19,7 @@ package v1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	metav1_shepherd "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
+	metav1_shepherd "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 )
 
 // RestoreSpec defines the desired state of Restore

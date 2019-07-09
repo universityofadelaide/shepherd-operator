@@ -20,9 +20,9 @@ import (
 	"flag"
 	"os"
 
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis"
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/controller"
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/webhook"
+	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
+	"github.com/universityofadelaide/shepherd-operator/pkg/controller"
+	"github.com/universityofadelaide/shepherd-operator/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"

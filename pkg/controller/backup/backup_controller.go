@@ -7,7 +7,7 @@ import (
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
-	v1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
+	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 	"io/ioutil"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,9 +25,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/k8s/sync"
-	resticutils "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/restic"
+	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
+	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
 )
 
 // ControllerName used for identifying which controller is performing an operation.

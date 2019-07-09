@@ -17,7 +17,7 @@ limitations under the License.
 package apis
 
 import (
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
+	"github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 )
 
 func init() {

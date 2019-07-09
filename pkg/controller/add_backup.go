@@ -17,7 +17,7 @@ limitations under the License.
 package controller
 
 import (
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/controller/backup"
+	"github.com/universityofadelaide/shepherd-operator/pkg/controller/backup"
 )
 
 func init() {

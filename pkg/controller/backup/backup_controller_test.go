@@ -12,8 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis"
-	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
+	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
+	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 )
 
 func TestReconcile(t *testing.T) {

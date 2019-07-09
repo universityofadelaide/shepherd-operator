@@ -19,7 +19,7 @@ limitations under the License.
 // Package v1 contains API Schema definitions for the extension v1 API group
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension
+// +k8s:conversion-gen=github.com/universityofadelaide/shepherd-operator/pkg/apis/extension
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=extension.shepherd
 package v1
