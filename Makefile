@@ -10,6 +10,8 @@ all: test manager
 preflight:
 	# Ensure kubebuilder 1.x is in use.
 	kubebuilder version | grep 'KubeBuilderVersion:"1'
+	# Ensure kustomzie 1.x is in use.
+	kustomize version | grep 'KustomizeVersion:1'
 
 # Run tests
 test: generate fmt vet manifests
