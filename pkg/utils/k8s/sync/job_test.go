@@ -1,5 +1,3 @@
-// +build unit
-
 package sync
 
 import (
@@ -16,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func TestCronJob(t *testing.T) {
+func TestJob(t *testing.T) {
 	client := fake.NewFakeClient()
 
 	parent := &appsv1.Deployment{
@@ -64,19 +62,11 @@ func TestCronJob(t *testing.T) {
 		},
 	}
 
-	result, err := controllerutil.CreateOrUpdate(context.TODO(), client, origJob, Job(parent, origJob.Spec, scheme.Scheme))
+	result, err := controllerutil.CreateOrUpdate(context.TODO(), client, origJob, Job(parent, scheme.Scheme))
 	assert.Nil(t, err)
-	assert.Equal(t, string(controllerutil.OperationResultCreated), string(result), "CronJob result is created")
+	assert.Equal(t, string(controllerutil.OperationResultCreated), string(result), "Job result is created")
 
-	newJob := &batchv1.Job{}
-	origJob.DeepCopyInto(newJob)
-	newJob.Spec.Template.Spec.Containers[0].Name = "Test 2"
-
-	result, err = controllerutil.CreateOrUpdate(context.TODO(), client, origJob, Job(parent, newJob.Spec, scheme.Scheme))
-	assert.Nil(t, err)
-	assert.Equal(t, string(controllerutil.OperationResultUpdated), string(result), "Job result is updated")
-
-	result, err = controllerutil.CreateOrUpdate(context.TODO(), client, origJob, Job(parent, newJob.Spec, scheme.Scheme))
+	result, err = controllerutil.CreateOrUpdate(context.TODO(), client, origJob, Job(parent, scheme.Scheme))
 	assert.Nil(t, err)
 	assert.Equal(t, string(controllerutil.OperationResultNone), string(result), "Job result is unchanged")
 }

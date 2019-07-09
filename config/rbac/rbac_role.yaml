@@ -5,9 +5,22 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - apps
+  - v1
   resources:
-  - deployments
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - v1
+  resources:
+  - pods/log
+  verbs:
+  - get
+- apiGroups:
+  - batch
+  resources:
+  - jobs
   verbs:
   - get
   - list
@@ -17,9 +30,9 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - apps
+  - batch
   resources:
-  - deployments/status
+  - jobs/status
   verbs:
   - get
   - update
@@ -45,9 +58,9 @@ rules:
   - update
   - patch
 - apiGroups:
-  - apps
+  - batch
   resources:
-  - deployments
+  - jobs
   verbs:
   - get
   - list
@@ -57,9 +70,9 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - apps
+  - batch
   resources:
-  - deployments/status
+  - jobs/status
   verbs:
   - get
   - update

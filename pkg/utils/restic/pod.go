@@ -2,11 +2,15 @@ package restic
 
 import (
 	"fmt"
+	v1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/meta/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	extensionv1 "gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/apis/extension/v1"
+
+	"gitlab.adelaide.edu.au/web-team/shepherd-operator/pkg/utils/helper"
+	"strings"
 )
 
 const (
@@ -25,9 +29,8 @@ const (
 	VolumeMySQL = "restic-mysql"
 )
 
-// PodSpecParams which are passed into the PodSpec function.
+// PodSpecParams which are passed into the PodSpecBackup and PodSpecRestore functions.
 type PodSpecParams struct {
-	SiteId      string
 	CPU         string
 	Memory      string
 	ResticImage string
@@ -36,8 +39,8 @@ type PodSpecParams struct {
 	Tags        []string
 }
 
-// PodSpec defines how a backup can be executed using a Pod.
-func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, error) {
+// PodSpecBackup defines how a backup can be executed using a Pod.
+func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId string) (corev1.PodSpec, error) {
 	cpu, err := resource.ParseQuantity(params.CPU)
 	if err != nil {
 		return corev1.PodSpec{}, err
@@ -72,10 +75,10 @@ func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, 
 			// in the main containers "restic backup" execution.
 			"restic init || true",
 		},
-	}, params.SiteId, backup)
+	}, siteId, backup.ObjectMeta.Namespace)
 
 	resticBackup := corev1.Container{
-		Name:       "restic-backup",
+		Name:       ResticBackupContainerName,
 		Image:      params.ResticImage,
 		Resources:  resources,
 		WorkingDir: params.WorkingDir,
@@ -83,7 +86,8 @@ func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, 
 			"/bin/sh", "-c",
 		},
 		Args: []string{
-			fmt.Sprintf("restic --verbose %s backup .", formatTags(params.Tags)),
+			// Backup, excluding any cached twig, css, or js.
+			fmt.Sprintf("restic --verbose %s backup . --exclude volume/*/*/php --exclude volume/*/*/css --exclude volume/*/*/js", formatTags(params.Tags)),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -101,7 +105,7 @@ func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, 
 		})
 	}
 
-	resticBackup = WrapContainer(resticBackup, params.SiteId, backup)
+	resticBackup = WrapContainer(resticBackup, siteId, backup.ObjectMeta.Namespace)
 
 	spec := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
@@ -117,6 +121,14 @@ func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, 
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium: corev1.StorageMediumDefault,
+					},
+				},
+			},
+			{
+				Name: VolumeRepository,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: VolumeRepository,
 					},
 				},
 			},
@@ -136,72 +148,16 @@ func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, 
 
 	for mysqlName, mysqlStatus := range backup.Spec.MySQL {
 		spec.InitContainers = append(spec.InitContainers, corev1.Container{
-			Name:      fmt.Sprintf("mysql-%s", mysqlName),
-			Image:     params.MySQLImage,
-			Resources: resources,
-			Env: []corev1.EnvVar{
-				{
-					Name: EnvMySQLHostname,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: mysqlStatus.Secret.Name,
-							},
-							Key: mysqlStatus.Secret.Keys.Hostname,
-						},
-					},
-				},
-				{
-					Name: EnvMySQLDatabase,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: mysqlStatus.Secret.Name,
-							},
-							Key: mysqlStatus.Secret.Keys.Database,
-						},
-					},
-				},
-				{
-					Name: EnvMySQLPort,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: mysqlStatus.Secret.Name,
-							},
-							Key: mysqlStatus.Secret.Keys.Port,
-						},
-					},
-				},
-				{
-					Name: EnvMySQLUsername,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: mysqlStatus.Secret.Name,
-							},
-							Key: mysqlStatus.Secret.Keys.Username,
-						},
-					},
-				},
-				{
-					Name: EnvMySQLPassword,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: mysqlStatus.Secret.Name,
-							},
-							Key: mysqlStatus.Secret.Keys.Password,
-						},
-					},
-				},
-			},
+			Name:       fmt.Sprintf("mysql-%s", mysqlName),
+			Image:      params.MySQLImage,
+			Resources:  resources,
+			Env:        mysqlEnvVars(mysqlStatus),
 			WorkingDir: params.WorkingDir,
 			Command: []string{
 				"/bin/sh", "-c",
 			},
 			Args: []string{
-				fmt.Sprintf("mysqldump --single-transaction --host=\"$MYSQL_HOSTNAME\" --user=\"$MYSQL_USERNAME\" --password=\"$MYSQL_PASSWORD\" \"$MYSQL_DATABASE\" > \"mysql/%s.sql\"", mysqlName),
+				fmt.Sprintf("mysqldump --single-transaction --host=\"$DATABASE_HOST\" --user=\"$DATABASE_USER\" --password=\"$DATABASE_PASSWORD\" --port=\"$DATABASE_PORT\" \"$DATABASE_NAME\" > \"mysql/%s.sql\"", mysqlName),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -213,4 +169,224 @@ func PodSpec(backup *extensionv1.Backup, params PodSpecParams) (corev1.PodSpec, 
 	}
 
 	return spec, nil
+}
+
+// PodSpecRestore defines how a restore can be executed using a Pod.
+func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpecParams, siteId string) (corev1.PodSpec, error) {
+	cpu, err := resource.ParseQuantity(params.CPU)
+	if err != nil {
+		return corev1.PodSpec{}, err
+	}
+
+	memory, err := resource.ParseQuantity(params.Memory)
+	if err != nil {
+		return corev1.PodSpec{}, err
+	}
+
+	resources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    cpu,
+			corev1.ResourceMemory: memory,
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    cpu,
+			corev1.ResourceMemory: memory,
+		},
+	}
+
+	var initContainers []corev1.Container
+	var containers []corev1.Container
+
+	// InitContainer which restores db to emptydir volume.
+	for mysqlName, mysqlStatus := range restore.Spec.MySQL {
+		initContainers = append(initContainers, corev1.Container{
+			Name:       fmt.Sprintf("restic-restore-%s", mysqlName),
+			Image:      params.ResticImage,
+			Resources:  resources,
+			WorkingDir: params.WorkingDir,
+			Command: []string{
+				"/bin/sh", "-c",
+			},
+			Args: []string{
+				helper.TprintfMustParse(
+					"restic dump {{.ResticId}} /{{.SQLPath}} > ./{{.SQLPath}}",
+					map[string]interface{}{
+						"ResticId": resticId,
+						"SQLPath":  fmt.Sprintf("mysql/%s.sql", mysqlName),
+					},
+				),
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      VolumeMySQL,
+					MountPath: fmt.Sprintf("%s/mysql", params.WorkingDir),
+				},
+			},
+		})
+
+		containers = append(containers, corev1.Container{
+			Name:       fmt.Sprintf("restic-import-%s", mysqlName),
+			Image:      params.MySQLImage,
+			Resources:  resources,
+			WorkingDir: params.WorkingDir,
+			Command: []string{
+				"/bin/sh", "-c",
+			},
+			Args: []string{
+				helper.TprintfMustParse(
+					"mysql --user=${DATABASE_USER} --password=${DATABASE_PASSWORD} --host=${DATABASE_HOST} --port=${DATABASE_PORT} ${DATABASE_NAME} < ./{{.SQLPath}}",
+					map[string]interface{}{
+						"SQLPath": fmt.Sprintf("mysql/%s.sql", mysqlName),
+					},
+				),
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      VolumeMySQL,
+					MountPath: fmt.Sprintf("%s/mysql", params.WorkingDir),
+				},
+			},
+			Env: mysqlEnvVars(mysqlStatus),
+		})
+	}
+
+	var volumeMounts []corev1.VolumeMount
+	var resticVolumeIncludeArgs []string
+	for volumeName := range restore.Spec.Volumes {
+		resticVolumeIncludeArgs = append(resticVolumeIncludeArgs, fmt.Sprintf("--include /volume/%s", volumeName))
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("volume-%s", volumeName),
+			MountPath: fmt.Sprintf("%s/volume/%s", params.WorkingDir, volumeName),
+			ReadOnly:  false,
+		})
+	}
+
+	// Container which restores volumes.
+	resticRestoreVolumes := corev1.Container{
+		Name:       "restic-restore-volumes",
+		Image:      params.ResticImage,
+		Resources:  resources,
+		WorkingDir: params.WorkingDir,
+		Command: []string{
+			"/bin/sh", "-c",
+		},
+		Args: []string{
+			helper.TprintfMustParse(
+				"restic restore {{.ResticId}} --target . {{.IncludeArgs}}",
+				map[string]interface{}{
+					"ResticId": resticId,
+					// @todo might be able to iterate through an array of volumeNames in the template.
+					"IncludeArgs": strings.Join(resticVolumeIncludeArgs, " "),
+				},
+			),
+		},
+		VolumeMounts: volumeMounts,
+	}
+
+	// Ensure all containers in pod have restic envvars and volumes mounted.
+	containers = append(containers, resticRestoreVolumes)
+	for i, _ := range containers {
+		containers[i] = WrapContainer(containers[i], siteId, restore.ObjectMeta.Namespace)
+	}
+	for i, _ := range initContainers {
+		initContainers[i] = WrapContainer(initContainers[i], siteId, restore.ObjectMeta.Namespace)
+	}
+
+	spec := corev1.PodSpec{
+		RestartPolicy:  corev1.RestartPolicyNever,
+		InitContainers: initContainers,
+		Containers:     containers,
+		Volumes: AttachVolume([]corev1.Volume{
+			{
+				Name: VolumeMySQL,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumDefault,
+					},
+				},
+			},
+			{
+				Name: VolumeRepository,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: VolumeRepository,
+					},
+				},
+			},
+		}),
+	}
+
+	for volumeName, volumeSpec := range restore.Spec.Volumes {
+		spec.Volumes = append(spec.Volumes, corev1.Volume{
+			Name: fmt.Sprintf("volume-%s", volumeName),
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: volumeSpec.ClaimName,
+				},
+			},
+		})
+	}
+
+	return spec, nil
+}
+
+// mysqlEnvVars returns a list of environment variables for a container based on the mysql spec.
+func mysqlEnvVars(mysqlStatus v1.SpecMySQL) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name: EnvMySQLHostname,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mysqlStatus.Secret.Name,
+					},
+					Key: mysqlStatus.Secret.Keys.Hostname,
+				},
+			},
+		},
+		{
+			Name: EnvMySQLDatabase,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mysqlStatus.Secret.Name,
+					},
+					Key: mysqlStatus.Secret.Keys.Database,
+				},
+			},
+		},
+		{
+			Name: EnvMySQLPort,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mysqlStatus.Secret.Name,
+					},
+					Key: mysqlStatus.Secret.Keys.Port,
+				},
+			},
+		},
+		{
+			Name: EnvMySQLUsername,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mysqlStatus.Secret.Name,
+					},
+					Key: mysqlStatus.Secret.Keys.Username,
+				},
+			},
+		},
+		{
+			Name: EnvMySQLPassword,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mysqlStatus.Secret.Name,
+					},
+					Key: mysqlStatus.Secret.Keys.Password,
+				},
+			},
+		},
+	}
 }
