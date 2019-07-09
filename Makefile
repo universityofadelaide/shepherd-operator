@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= docker.io/uofa/shepherd-operator:latest
 
 # Disable go modules (use dep)
 export GO111MODULE=off
