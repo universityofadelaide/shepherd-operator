@@ -27,8 +27,25 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            mysql:
+              description: MySQL databases which will be backed up.
+              type: object
+            schedule:
+              description: Schedule is the crontab statement which defines how often
+                a backup should run.
+              type: string
+            volumes:
+              description: Volumes which will be backed up.
+              type: object
+          required:
+          - schedule
           type: object
         status:
+          properties:
+            lastExecutedTime:
+              format: date-time
+              type: string
           type: object
   version: v1
 status:

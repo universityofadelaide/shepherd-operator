@@ -58,9 +58,9 @@ rules:
   - update
   - patch
 - apiGroups:
-  - apps
+  - extension.shepherd
   resources:
-  - deployments
+  - backups
   verbs:
   - get
   - list
@@ -70,9 +70,9 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - apps
+  - extension.shepherd
   resources:
-  - deployments/status
+  - backups/status
   verbs:
   - get
   - update
