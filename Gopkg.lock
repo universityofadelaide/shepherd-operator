@@ -181,6 +181,14 @@
   version = "v0.3.0"
 
 [[projects]]
+  digest = "1:908268db0726d942d20f7dd6bd4a85d41daf6bf7a9ca027cf85a495c2c547bbf"
+  name = "github.com/gorhill/cronexpr"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "a557574d6c024ed6e36acc8b610f5f211c91568a"
+  version = "1.0.0"
+
+[[projects]]
   branch = "master"
   digest = "1:3fd71568acc0a8122ddfda5873fb47ce0f40da6788a6d8872f4cc20ff7e8f502"
   name = "github.com/gregjones/httpcache"
@@ -1028,6 +1036,7 @@
   input-imports = [
     "github.com/emicklei/go-restful",
     "github.com/go-test/deep",
+    "github.com/gorhill/cronexpr",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "github.com/pkg/errors",
