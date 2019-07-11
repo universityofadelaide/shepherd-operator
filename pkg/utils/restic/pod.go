@@ -2,8 +2,10 @@ package restic
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 
+	osv1 "github.com/openshift/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -172,7 +174,7 @@ func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId stri
 }
 
 // PodSpecRestore defines how a restore can be executed using a Pod.
-func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpecParams, siteId string) (corev1.PodSpec, error) {
+func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, resticId string, params PodSpecParams, siteId string) (corev1.PodSpec, error) {
 	cpu, err := resource.ParseQuantity(params.CPU)
 	if err != nil {
 		return corev1.PodSpec{}, err
@@ -224,7 +226,7 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 			},
 		})
 
-		containers = append(containers, corev1.Container{
+		initContainers = append(initContainers, corev1.Container{
 			Name:       fmt.Sprintf("restic-import-%s", mysqlName),
 			Image:      params.MySQLImage,
 			Resources:  resources,
@@ -245,6 +247,7 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 		})
 	}
 
+	// Mount restore volumes into volume restore container.
 	var volumeMounts []corev1.VolumeMount
 	var resticVolumeIncludeArgs []string
 	for volumeName := range restore.Spec.Volumes {
@@ -278,39 +281,28 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 		VolumeMounts: volumeMounts,
 	})
 
-	for i, _ := range containers {
-		containers[i] = WrapContainer(containers[i], siteId, restore.ObjectMeta.Namespace)
-	}
-	for i, _ := range initContainers {
-		initContainers[i] = WrapContainer(initContainers[i], siteId, restore.ObjectMeta.Namespace)
-	}
-
-	spec := corev1.PodSpec{
-		RestartPolicy:  corev1.RestartPolicyNever,
-		InitContainers: initContainers,
-		Containers:     containers,
-		Volumes: AttachVolume([]corev1.Volume{
-			{
-				Name: VolumeMySQL,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{
-						Medium: corev1.StorageMediumDefault,
-					},
+	// Volume definitions for the pod.
+	specVolumes := AttachVolume([]corev1.Volume{
+		{
+			Name: VolumeMySQL,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium: corev1.StorageMediumDefault,
 				},
 			},
-			{
-				Name: VolumeRepository,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: VolumeRepository,
-					},
+		},
+		{
+			Name: VolumeRepository,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: VolumeRepository,
 				},
 			},
-		}),
-	}
-
+		},
+	})
+	// Attach restore volumes to pod.
 	for volumeName, volumeSpec := range restore.Spec.Volumes {
-		spec.Volumes = append(spec.Volumes, corev1.Volume{
+		specVolumes = append(specVolumes, corev1.Volume{
 			Name: fmt.Sprintf("volume-%s", volumeName),
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
@@ -318,6 +310,65 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 				},
 			},
 		})
+	}
+
+	dcContainer, err := getWebContainerFromDc(dc)
+	if err != nil {
+		return corev1.PodSpec{}, err
+	}
+	dcVolumeMounts := dcContainer.VolumeMounts
+	// Add volumes from the deploymentconfig that we don't already have in the restore spec.
+	for _, dcVolume := range dc.Spec.Template.Spec.Volumes {
+		found := false
+		for _, specVolume := range specVolumes {
+			if dcVolume.PersistentVolumeClaim != nil && specVolume.PersistentVolumeClaim != nil &&
+				dcVolume.PersistentVolumeClaim.ClaimName == specVolume.PersistentVolumeClaim.ClaimName {
+				found = true
+				// We've found a volume we already have, make sure the volume mount name references the existing volume.
+				for i, dcVolumeMount := range dcVolumeMounts {
+					if dcVolumeMount.Name == dcVolume.Name {
+						dcVolumeMounts[i].Name = specVolume.Name
+					}
+				}
+			}
+		}
+
+		if !found {
+			specVolumes = append(specVolumes, dcVolume)
+		}
+	}
+	// Container which runs deployment steps.
+	containers = append(containers, corev1.Container{
+		Name:       "restore-deploy",
+		Image:      dcContainer.Image,
+		Resources:  resources,
+		WorkingDir: WebDirectory,
+		Command: []string{
+			"/bin/sh", "-c",
+		},
+		Args: []string{
+			helper.TprintfMustParse(
+				"drush -r {{.WebDir}}/web cr && drush -r {{.WebDir}}/web -y updb && robo config:import-plus && drush -r {{.WebDir}}/web cr",
+				map[string]interface{}{
+					"WebDir": WebDirectory,
+				},
+			),
+		},
+		Env:          dcContainer.Env,
+		VolumeMounts: dcVolumeMounts,
+	})
+
+	for i, _ := range containers {
+		containers[i] = WrapContainer(containers[i], siteId, restore.ObjectMeta.Namespace)
+	}
+	for i, _ := range initContainers {
+		initContainers[i] = WrapContainer(initContainers[i], siteId, restore.ObjectMeta.Namespace)
+	}
+	spec := corev1.PodSpec{
+		RestartPolicy:  corev1.RestartPolicyNever,
+		InitContainers: initContainers,
+		Containers:     containers,
+		Volumes:        specVolumes,
 	}
 
 	return spec, nil
@@ -382,4 +433,15 @@ func mysqlEnvVars(mysqlStatus v1.SpecMySQL) []corev1.EnvVar {
 			},
 		},
 	}
+}
+
+// getWebContainerFromDc loops through a deploymentconfig to find the container with the same name. This is considered
+// the web container in shepherd.
+func getWebContainerFromDc(dc *osv1.DeploymentConfig) (corev1.Container, error) {
+	for _, container := range dc.Spec.Template.Spec.Containers {
+		if container.Name == dc.ObjectMeta.Name {
+			return container, nil
+		}
+	}
+	return corev1.Container{}, errors.Errorf("web container not found for dc %s", dc.ObjectMeta.Name)
 }

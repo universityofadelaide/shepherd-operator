@@ -339,6 +339,25 @@
   version = "v1.5.0"
 
 [[projects]]
+  digest = "1:a61aad1f69d9b342e724828664ad94dcddd7a3f33a6d860940beb14c0d1603bc"
+  name = "github.com/openshift/api"
+  packages = ["apps/v1"]
+  pruneopts = "T"
+  revision = "0d921e363e951d89f583292c60d013c318df64dc"
+  version = "v3.9.0"
+
+[[projects]]
+  digest = "1:7da30d36edabf50fb5bc07f759991589c5ca72e75b3dd50fa58c57d94e96fd15"
+  name = "github.com/openshift/client-go"
+  packages = [
+    "apps/clientset/versioned/scheme",
+    "apps/clientset/versioned/typed/apps/v1",
+  ]
+  pruneopts = "T"
+  revision = "1fa528d3be060e4c7178eb69e76d37cf7e699e3c"
+  version = "v3.9.0"
+
+[[projects]]
   digest = "1:e5d0bd87abc2781d14e274807a470acd180f0499f8bf5bb18606e9ec22ad9de9"
   name = "github.com/pborman/uuid"
   packages = ["."]
@@ -1030,6 +1049,8 @@
     "github.com/go-test/deep",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
+    "github.com/openshift/api/apps/v1",
+    "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1",
     "github.com/pkg/errors",
     "github.com/skpr/operator/pkg/utils/controller/logger",
     "github.com/stretchr/testify/assert",

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"time"
 
+	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
 	errorspkg "github.com/pkg/errors"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
@@ -41,7 +43,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileRestore{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileRestore{
+		Config: mgr.GetConfig(),
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -70,6 +76,7 @@ var _ reconcile.Reconciler = &ReconcileRestore{}
 // ReconcileRestore reconciles a Restore object
 type ReconcileRestore struct {
 	client.Client
+	Config *rest.Config
 	scheme *runtime.Scheme
 }
 
@@ -78,6 +85,7 @@ type ReconcileRestore struct {
 // Automatically generate RBAC rules to allow the Controller to read and write Jobs.
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get
 // +kubebuilder:rbac:groups=extension.shepherd,resources=restores,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=restores/status,verbs=get;update;patch
 func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -125,8 +133,25 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
-	if err := r.ValidateRequest(request); err != nil {
-		return reconcile.Result{}, errorspkg.Wrap(err, "Request validation failed")
+	if _, found := restore.ObjectMeta.GetLabels()["site"]; !found {
+		// @todo add some info to the status identifying the restore failed
+		log.Info(fmt.Sprintf("Restore %s doesn't have a site label, skipping.", restore.ObjectMeta.Name))
+		return reconcile.Result{}, nil
+	}
+	// TODO: Add environment to spec so we don't have to derive the deploymentconfig name.
+	if _, found := restore.ObjectMeta.GetLabels()["environment"]; !found {
+		log.Info(fmt.Sprintf("Restore %s doesn't have a environment label, skipping.", restore.ObjectMeta.Name))
+		return reconcile.Result{}, nil
+	}
+
+	v1client, err := osv1client.NewForConfig(r.Config)
+	if err != nil {
+		return reconcile.Result{}, errorspkg.Wrap(err, "failed to get deploymentconfig client")
+	}
+	dcName := fmt.Sprintf("node-%s", restore.ObjectMeta.GetLabels()["environment"])
+	dc, err := v1client.DeploymentConfigs(restore.ObjectMeta.Namespace).Get(dcName, metav1.GetOptions{})
+	if err != nil {
+		return reconcile.Result{}, errorspkg.Wrapf(err, "failed to get deploymentconfig %s", dcName)
 	}
 
 	var params = resticutils.PodSpecParams{
@@ -137,7 +162,7 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 		WorkingDir:  "/home/shepherd",
 		Tags:        []string{},
 	}
-	spec, err := resticutils.PodSpecRestore(restore, backup.Status.ResticID, params, restore.ObjectMeta.GetLabels()["site"])
+	spec, err := resticutils.PodSpecRestore(restore, dc, backup.Status.ResticID, params, restore.ObjectMeta.GetLabels()["site"])
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -204,12 +229,6 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 	log.Info("Reconcile finished")
 
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileRestore) ValidateRequest(request reconcile.Request) error {
-	// @todo add validation such as required labels etc.
-
-	return nil
 }
 
 // requeueAfterSeconds returns a reconcile.Result to requeue after seconds time.
