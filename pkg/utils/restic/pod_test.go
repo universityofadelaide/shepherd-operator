@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	osv1 "github.com/openshift/api/apps/v1"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	metav1_shepherd "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 )
@@ -294,6 +295,62 @@ func TestPodSpecRestore(t *testing.T) {
 			},
 		},
 	}
+
+	dc := osv1.DeploymentConfig{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-dc",
+			Namespace: "test-namespace",
+		},
+		Spec: osv1.DeploymentConfigSpec{
+			Template: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "test-dc",
+							Image: "test/deploy-image",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name: "different-named-volume",
+									MountPath: "/testmount",
+								},
+								{
+									Name: "another-unrelated-volume",
+									MountPath: "/testmount2",
+								},
+							},
+							Env: []corev1.EnvVar {
+								{
+									Name: "foo",
+									Value: "bar",
+								},
+								{
+									Name: "baz",
+									Value: "blop",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume {
+						{
+							// Volume with the same claim name as the restore to test names are overwritten.
+							Name: "different-named-volume",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "claim-volume1",
+								},
+							},
+						},
+						{
+							Name: "another-unrelated-volume",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 	cpu, _ := resource.ParseQuantity(params.CPU)
 	memory, _ := resource.ParseQuantity(params.Memory)
 	mode := corev1.ConfigMapVolumeSourceDefaultMode
@@ -347,8 +404,6 @@ func TestPodSpecRestore(t *testing.T) {
 					},
 				},
 			},
-		},
-		Containers: []corev1.Container{
 			{
 				Name:       "restic-import-mysql1",
 				Image:      "test/mysqlimage",
@@ -479,6 +534,40 @@ func TestPodSpecRestore(t *testing.T) {
 				},
 			},
 		},
+		Containers: []corev1.Container{
+			{
+				Name: "restore-deploy",
+				Image: "test/deploy-image",
+				Resources: resources,
+				WorkingDir: WebDirectory,
+				Command: []string{
+					"/bin/sh", "-c",
+				},
+				Args: []string{
+					"drush -r /code/web cr && drush -r /code/web -y updb && robo config:import-plus && drush -r /code/web cr",
+				},
+				Env: []corev1.EnvVar {
+					{
+						Name: "foo",
+						Value: "bar",
+					},
+					{
+						Name: "baz",
+						Value: "blop",
+					},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name: "volume-volume1",
+						MountPath: "/testmount",
+					},
+					{
+						Name: "another-unrelated-volume",
+						MountPath: "/testmount2",
+					},
+				},
+			},
+		},
 		Volumes: []corev1.Volume{
 			{
 				Name: VolumeMySQL,
@@ -513,9 +602,15 @@ func TestPodSpecRestore(t *testing.T) {
 					},
 				},
 			},
+			{
+				Name: "another-unrelated-volume",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
 		},
 	}
 
-	spec, _ := PodSpecRestore(&restore, "abcd1234", params, "test-site-id")
+	spec, _ := PodSpecRestore(&restore, &dc, "abcd1234", params, "test-site-id")
 	assert.Equal(t, expected, spec)
 }

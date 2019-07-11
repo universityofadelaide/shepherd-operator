@@ -248,11 +248,11 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 	}
 
 	// Mount restore volumes into volume restore container.
-	var volumeMounts []corev1.VolumeMount
+	var resticRestoreVolumeMounts []corev1.VolumeMount
 	var resticVolumeIncludeArgs []string
 	for volumeName := range restore.Spec.Volumes {
 		resticVolumeIncludeArgs = append(resticVolumeIncludeArgs, fmt.Sprintf("--include /volume/%s", volumeName))
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		resticRestoreVolumeMounts = append(resticRestoreVolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("volume-%s", volumeName),
 			MountPath: fmt.Sprintf("%s/volume/%s", params.WorkingDir, volumeName),
 			ReadOnly:  false,
@@ -260,7 +260,7 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 	}
 
 	// Container which restores volumes.
-	containers = append(containers, corev1.Container{
+	initContainers = append(initContainers, corev1.Container{
 		Name:       "restic-restore-volumes",
 		Image:      params.ResticImage,
 		Resources:  resources,
@@ -278,7 +278,7 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 				},
 			),
 		},
-		VolumeMounts: volumeMounts,
+		VolumeMounts: resticRestoreVolumeMounts,
 	})
 
 	// Volume definitions for the pod.
@@ -358,9 +358,6 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 		VolumeMounts: dcVolumeMounts,
 	})
 
-	for i, _ := range containers {
-		containers[i] = WrapContainer(containers[i], siteId, restore.ObjectMeta.Namespace)
-	}
 	for i, _ := range initContainers {
 		initContainers[i] = WrapContainer(initContainers[i], siteId, restore.ObjectMeta.Namespace)
 	}
