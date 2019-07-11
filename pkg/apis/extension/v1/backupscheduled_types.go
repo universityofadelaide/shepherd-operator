@@ -18,7 +18,7 @@ type BackupScheduledSpec struct {
 
 // BackupScheduledStatus defines the observed state of BackupScheduled
 type BackupScheduledStatus struct {
-	LastExecutedTime *metav1.Time          `json:"lastExecutedTime,omitempty"`
+	LastExecutedTime *metav1.Time `json:"lastExecutedTime,omitempty"`
 }
 
 // +genclient
