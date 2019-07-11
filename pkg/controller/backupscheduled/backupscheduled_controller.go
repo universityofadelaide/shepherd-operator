@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -18,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
@@ -104,7 +104,7 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 	log.Info("Calculating next scheduled backup.")
 	now := time.Now()
 	status := extensionv1.BackupScheduledStatus{
-		LastExecutedTime: &metav1.Time{getScheduleComparison(backupScheduled.Status, now)},
+		LastExecutedTime: &metav1.Time{Time: getScheduleComparison(backupScheduled.Status, now)},
 	}
 
 	// Check if we are currently due for a backup to be scheduled.

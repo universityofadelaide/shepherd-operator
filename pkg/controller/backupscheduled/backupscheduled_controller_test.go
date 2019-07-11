@@ -97,7 +97,6 @@ func TestReconcileNoLabels(t *testing.T) {
 	assert.Error(t, err, "BackupScheduled doesn't have a site label.")
 }
 
-
 func TestReconcileNoSchedule(t *testing.T) {
 	apis.AddToScheme(scheme.Scheme)
 
@@ -135,7 +134,7 @@ func TestGetScheduleComparison(t *testing.T) {
 
 	d, _ := time.Parse(time.RFC3339, time.RFC3339)
 	spec2 := extensionv1.BackupScheduledStatus{
-		LastExecutedTime: &metav1.Time{d},
+		LastExecutedTime: &metav1.Time{Time: d},
 	}
 	now2 := time.Now()
 	assert.Equal(t, d, getScheduleComparison(spec2, now2), "comparison time defaults to last executed time")
