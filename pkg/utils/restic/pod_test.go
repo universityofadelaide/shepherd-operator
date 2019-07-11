@@ -306,31 +306,31 @@ func TestPodSpecRestore(t *testing.T) {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name: "test-dc",
+							Name:  "test-dc",
 							Image: "test/deploy-image",
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name: "different-named-volume",
+									Name:      "different-named-volume",
 									MountPath: "/testmount",
 								},
 								{
-									Name: "another-unrelated-volume",
+									Name:      "another-unrelated-volume",
 									MountPath: "/testmount2",
 								},
 							},
-							Env: []corev1.EnvVar {
+							Env: []corev1.EnvVar{
 								{
-									Name: "foo",
+									Name:  "foo",
 									Value: "bar",
 								},
 								{
-									Name: "baz",
+									Name:  "baz",
 									Value: "blop",
 								},
 							},
 						},
 					},
-					Volumes: []corev1.Volume {
+					Volumes: []corev1.Volume{
 						{
 							// Volume with the same claim name as the restore to test names are overwritten.
 							Name: "different-named-volume",
@@ -536,9 +536,9 @@ func TestPodSpecRestore(t *testing.T) {
 		},
 		Containers: []corev1.Container{
 			{
-				Name: "restore-deploy",
-				Image: "test/deploy-image",
-				Resources: resources,
+				Name:       "restore-deploy",
+				Image:      "test/deploy-image",
+				Resources:  resources,
 				WorkingDir: WebDirectory,
 				Command: []string{
 					"/bin/sh", "-c",
@@ -546,23 +546,23 @@ func TestPodSpecRestore(t *testing.T) {
 				Args: []string{
 					"drush -r /code/web cr && drush -r /code/web -y updb && robo config:import-plus && drush -r /code/web cr",
 				},
-				Env: []corev1.EnvVar {
+				Env: []corev1.EnvVar{
 					{
-						Name: "foo",
+						Name:  "foo",
 						Value: "bar",
 					},
 					{
-						Name: "baz",
+						Name:  "baz",
 						Value: "blop",
 					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
-						Name: "volume-volume1",
+						Name:      "volume-volume1",
 						MountPath: "/testmount",
 					},
 					{
-						Name: "another-unrelated-volume",
+						Name:      "another-unrelated-volume",
 						MountPath: "/testmount2",
 					},
 				},
