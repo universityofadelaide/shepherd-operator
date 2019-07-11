@@ -6,18 +6,11 @@ import (
 	"time"
 
 	"github.com/go-test/deep"
+	"github.com/gorhill/cronexpr"
 	"github.com/pkg/errors"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
-	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
-	"io/ioutil"
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -28,9 +21,6 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
-	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
-	"github.com/universityofadelaide/shepherd-operator/pkg/apis/extension"
-	"github.com/gorhill/cronexpr"
 )
 
 const ControllerName = "backup-scheduled-controller"
@@ -100,114 +90,58 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 
 	if _, found := backupScheduled.ObjectMeta.GetLabels()["site"]; !found {
 		// @todo add some info to the status identifying the backup failed
-		log.Info(fmt.Sprintf("BackupScheduled %s doesn't have a site label, skipping.", backup.ObjectMeta.Name))
+		log.Info(fmt.Sprintf("BackupScheduled %s doesn't have a site label, skipping.", backupScheduled.ObjectMeta.Name))
 		return reconcile.Result{}, nil
 	}
 
+	log.Info("Calculating next scheduled backup.")
 	now := time.Now()
-
-	// Set up the first schedule if
-	if backupScheduled.Status.LastExecutedTime == nil {
-		next := cronexpr.MustParse(backupScheduled.Spec.Schedule).Next(now)
-		nextDuration := next.Unix() - now.Unix()
-		return reconcile.Result{
-			RequeueAfter: time.Duration(nextDuration),
-		}, nil
+	startingPoint := now
+	var status extensionv1.BackupScheduledStatus
+	if backupScheduled.Status.LastExecutedTime != nil {
+		startingPoint = backupScheduled.Status.LastExecutedTime.Time
+		status.LastExecutedTime.Time = startingPoint
 	}
 
+	// Check if we are currently due for a backup to be scheduled.
+	next := cronexpr.MustParse(backupScheduled.Spec.Schedule).Next(startingPoint)
+	if next.Before(now) || next.Equal(now) {
+		// Due for a backup - create object.
+		log.Info("Backup due - creating.")
+		var backup *extensionv1.Backup
+		backup.Name = fmt.Sprintf("%s-%d", backupScheduled.Name, now.Unix())
+		backup.Labels = backupScheduled.Labels
+		backup.Spec.MySQL = backupScheduled.Spec.MySQL
+		backup.Spec.Volumes = backupScheduled.Spec.Volumes
 
-
-
-	var backup extensionv1.Backup
-	backup.Name = fmt.Sprintf("%s-%d", backupScheduled.Name, now.Unix())
-	backup.Labels = backupScheduled.Labels
-	backup.Spec.MySQL = backupScheduled.Spec.MySQL
-	backup.Spec.Volumes = backupScheduled.Spec.Volumes
-
-
-	var params = resticutils.PodSpecParams{
-		CPU:         "100m",
-		Memory:      "512Mi",
-		ResticImage: "docker.io/restic/restic:0.9.5",
-		MySQLImage:  "docker.io/library/mariadb:10",
-		WorkingDir:  "/home/shepherd",
-		Tags:        []string{},
-	}
-	spec, err := resticutils.PodSpecBackup(backup, params, backup.ObjectMeta.GetLabels()["site"])
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	var (
-		parallelism    int32 = 1
-		completions    int32 = 1
-		activeDeadline int64 = 3600
-		backOffLimit   int32 = 2
-	)
-
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
-			Namespace: backup.ObjectMeta.Namespace,
-		},
-		Spec: batchv1.JobSpec{
-			Parallelism:           &parallelism,
-			Completions:           &completions,
-			ActiveDeadlineSeconds: &activeDeadline,
-			BackoffLimit:          &backOffLimit,
-			Template: corev1.PodTemplateSpec{
-				Spec: spec,
-			},
-		},
-	}
-
-	log.Info("Syncing Job")
-	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, r.scheme))
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	log.Infof("Synced Job %s with status: %s", job.ObjectMeta.Name, result)
-
-	log.Info("Syncing status")
-	status := extensionv1.BackupStatus{
-		Phase:          v1.PhaseNew,
-		StartTime:      job.Status.StartTime,
-		CompletionTime: job.Status.CompletionTime,
-	}
-
-	if job.Status.Active > 0 {
-		status.Phase = v1.PhaseInProgress
-	} else {
-		if job.Status.Succeeded > 0 {
-			resticId, err := getResticIdFromJob(r.Config, job)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrap(err, "failed to parse resticId")
-			}
-
-			if resticId != "" {
-				status.ResticID = resticId
-				status.Phase = v1.PhaseCompleted
-			} else {
-				status.Phase = v1.PhaseFailed
-			}
+		result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, backup, sync.Backup(backup, r.scheme))
+		if err != nil {
+			return reconcile.Result{
+				Requeue: true,
+			}, err
 		}
-		if job.Status.Failed > 0 {
-			status.Phase = v1.PhaseFailed
-		}
+		log.Info(fmt.Sprintf("Created backup with result: %s.", result))
+
+		// Update status with LastExecutedTime.
+		status.LastExecutedTime.Time = time.Now()
 	}
 
-	if diff := deep.Equal(backup.Status, status); diff != nil {
+	if diff := deep.Equal(backupScheduled.Status, status); diff != nil {
 		log.Info(fmt.Sprintf("Status change dectected: %s", diff))
 
-		backup.Status = status
+		backupScheduled.Status = status
 
-		err := r.Status().Update(context.TODO(), backup)
+		err := r.Status().Update(context.TODO(), backupScheduled)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed to update status")
 		}
 	}
 
-	log.Info("Reconcile finished")
+	next = cronexpr.MustParse(backupScheduled.Spec.Schedule).Next(now)
+	nextDuration := next.Unix() - now.Unix()
 
-	return reconcile.Result{}, nil
+	log.Info(fmt.Sprintf("Reconcile finished, requeued for %s", next.Format(time.RFC3339)))
+	return reconcile.Result{
+		RequeueAfter: time.Duration(nextDuration),
+	}, nil
 }
