@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
@@ -88,23 +89,26 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	if backupScheduled.Spec.Schedule == "" {
+		err := errors.New("BackupScheduled doesn't have a schedule.")
+		log.Error(err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if _, found := backupScheduled.ObjectMeta.GetLabels()["site"]; !found {
-		// @todo add some info to the status identifying the backup failed
-		log.Info(fmt.Sprintf("BackupScheduled %s doesn't have a site label, skipping.", backupScheduled.ObjectMeta.Name))
-		return reconcile.Result{}, nil
+		err := errors.New("BackupScheduled doesn't have a site label.")
+		log.Error(err.Error())
+		return reconcile.Result{}, err
 	}
 
 	log.Info("Calculating next scheduled backup.")
 	now := time.Now()
-	startingPoint := now
-	var status extensionv1.BackupScheduledStatus
-	if backupScheduled.Status.LastExecutedTime != nil {
-		startingPoint = backupScheduled.Status.LastExecutedTime.Time
-		status.LastExecutedTime.Time = startingPoint
+	status := extensionv1.BackupScheduledStatus{
+		LastExecutedTime: &metav1.Time{getScheduleComparison(backupScheduled.Status, now)},
 	}
 
 	// Check if we are currently due for a backup to be scheduled.
-	next := cronexpr.MustParse(backupScheduled.Spec.Schedule).Next(startingPoint)
+	next := cronexpr.MustParse(backupScheduled.Spec.Schedule).Next(status.LastExecutedTime.Time)
 	if next.Before(now) || next.Equal(now) {
 		// Due for a backup - create object.
 		log.Info("Backup due - creating.")
@@ -144,4 +148,12 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 	return reconcile.Result{
 		RequeueAfter: time.Duration(nextDuration),
 	}, nil
+}
+
+func getScheduleComparison(s extensionv1.BackupScheduledStatus, now time.Time) time.Time {
+	if s.LastExecutedTime != nil {
+		return s.LastExecutedTime.Time
+	}
+
+	return now
 }
