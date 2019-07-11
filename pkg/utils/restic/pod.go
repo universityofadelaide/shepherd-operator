@@ -286,9 +286,7 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 		{
 			Name: VolumeMySQL,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{
-					Medium: corev1.StorageMediumDefault,
-				},
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{
