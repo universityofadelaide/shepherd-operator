@@ -154,10 +154,10 @@ func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId stri
 			Env:        mysqlEnvVars(mysqlStatus),
 			WorkingDir: params.WorkingDir,
 			Command: []string{
-				"/bin/sh", "-c",
+				"database-backup",
 			},
 			Args: []string{
-				fmt.Sprintf("mysqldump --single-transaction --host=\"$DATABASE_HOST\" --user=\"$DATABASE_USER\" --password=\"$DATABASE_PASSWORD\" --port=\"$DATABASE_PORT\" \"$DATABASE_NAME\" > \"mysql/%s.sql\"", mysqlName),
+				fmt.Sprintf("mysql/%s.sql", mysqlName),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -230,15 +230,10 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 			Resources:  resources,
 			WorkingDir: params.WorkingDir,
 			Command: []string{
-				"/bin/sh", "-c",
+				"database-restore",
 			},
 			Args: []string{
-				helper.TprintfMustParse(
-					"mysql --user=${DATABASE_USER} --password=${DATABASE_PASSWORD} --host=${DATABASE_HOST} --port=${DATABASE_PORT} ${DATABASE_NAME} < ./{{.SQLPath}}",
-					map[string]interface{}{
-						"SQLPath": fmt.Sprintf("mysql/%s.sql", mysqlName),
-					},
-				),
+				fmt.Sprintf("mysql/%s.sql", mysqlName),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -262,7 +257,7 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 	}
 
 	// Container which restores volumes.
-	resticRestoreVolumes := corev1.Container{
+	containers = append(containers, corev1.Container{
 		Name:       "restic-restore-volumes",
 		Image:      params.ResticImage,
 		Resources:  resources,
@@ -281,10 +276,8 @@ func PodSpecRestore(restore *extensionv1.Restore, resticId string, params PodSpe
 			),
 		},
 		VolumeMounts: volumeMounts,
-	}
+	})
 
-	// Ensure all containers in pod have restic envvars and volumes mounted.
-	containers = append(containers, resticRestoreVolumes)
 	for i, _ := range containers {
 		containers[i] = WrapContainer(containers[i], siteId, restore.ObjectMeta.Namespace)
 	}

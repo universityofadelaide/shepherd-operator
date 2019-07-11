@@ -133,7 +133,7 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 		CPU:         "100m",
 		Memory:      "512Mi",
 		ResticImage: "docker.io/restic/restic:0.9.5",
-		MySQLImage:  "docker.io/library/mariadb:10",
+		MySQLImage:  "previousnext/mysql",
 		WorkingDir:  "/home/shepherd",
 		Tags:        []string{},
 	}

@@ -159,10 +159,10 @@ func TestPodSpecBackup(t *testing.T) {
 				},
 				WorkingDir: "/home/test",
 				Command: []string{
-					"/bin/sh", "-c",
+					"database-backup",
 				},
 				Args: []string{
-					"mysqldump --single-transaction --host=\"$DATABASE_HOST\" --user=\"$DATABASE_USER\" --password=\"$DATABASE_PASSWORD\" --port=\"$DATABASE_PORT\" \"$DATABASE_NAME\" > \"mysql/mysql1.sql\"",
+					"mysql/mysql1.sql",
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -355,10 +355,10 @@ func TestPodSpecRestore(t *testing.T) {
 				Resources:  resources,
 				WorkingDir: "/home/test",
 				Command: []string{
-					"/bin/sh", "-c",
+					"database-restore",
 				},
 				Args: []string{
-					"mysql --user=${DATABASE_USER} --password=${DATABASE_PASSWORD} --host=${DATABASE_HOST} --port=${DATABASE_PORT} ${DATABASE_NAME} < ./mysql/mysql1.sql",
+					"mysql/mysql1.sql",
 				},
 				Env: []corev1.EnvVar{
 					{
