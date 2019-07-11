@@ -613,4 +613,8 @@ func TestPodSpecRestore(t *testing.T) {
 
 	spec, _ := PodSpecRestore(&restore, &dc, "abcd1234", params, "test-site-id")
 	assert.Equal(t, expected, spec)
+
+	dc.Spec.Template.Spec.Containers[0].Name = "different name"
+	_, err := PodSpecRestore(&restore, &dc, "abcd1234", params, "test-site-id")
+	assert.NotNil(t, err)
 }
