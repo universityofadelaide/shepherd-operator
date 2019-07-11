@@ -151,7 +151,8 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 	dcName := fmt.Sprintf("node-%s", restore.ObjectMeta.GetLabels()["environment"])
 	dc, err := v1client.DeploymentConfigs(restore.ObjectMeta.Namespace).Get(dcName, metav1.GetOptions{})
 	if err != nil {
-		return reconcile.Result{}, errorspkg.Wrapf(err, "failed to get deploymentconfig %s", dcName)
+		// Don't throw an error here to account for restores that were created before an environment was deleted.
+		return reconcile.Result{}, nil
 	}
 
 	var params = resticutils.PodSpecParams{
