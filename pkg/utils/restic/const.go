@@ -14,3 +14,6 @@ const ResticSecretPasswordName = "shepherd-restic-secret"
 
 // ResticBackupContainerName is the name of the container in the restic backup pod.
 const ResticBackupContainerName = "restic-backup"
+
+// WebDirectory is working directory for the restore deployment step.
+const WebDirectory = "/code"

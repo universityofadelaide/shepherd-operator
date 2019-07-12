@@ -118,6 +118,12 @@ rules:
   - update
   - patch
 - apiGroups:
+  - apps.openshift.io
+  resources:
+  - deploymentconfigs
+  verbs:
+  - get
+- apiGroups:
   - extension.shepherd
   resources:
   - restores
