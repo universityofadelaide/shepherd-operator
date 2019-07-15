@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  labels:
+  annotations:
     heritage: github.com/universityofadelaide/shepherd-operator
   name: shepherd-operator-webhook-server-secret
   namespace: shepherd-dev
@@ -9,10 +9,11 @@ metadata:
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    heritage: github.com/universityofadelaide/shepherd-operator
   labels:
     control-plane: controller-manager
     controller-tools.k8s.io: "1.0"
-    heritage: github.com/universityofadelaide/shepherd-operator
   name: shepherd-operator-controller-manager-service
   namespace: shepherd-dev
 spec:
@@ -21,15 +22,15 @@ spec:
   selector:
     control-plane: controller-manager
     controller-tools.k8s.io: "1.0"
-    heritage: github.com/universityofadelaide/shepherd-operator
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  annotations:
+    heritage: github.com/universityofadelaide/shepherd-operator
   labels:
     control-plane: controller-manager
     controller-tools.k8s.io: "1.0"
-    heritage: github.com/universityofadelaide/shepherd-operator
   name: shepherd-operator-controller-manager
   namespace: shepherd-dev
 spec:
@@ -37,14 +38,14 @@ spec:
     matchLabels:
       control-plane: controller-manager
       controller-tools.k8s.io: "1.0"
-      heritage: github.com/universityofadelaide/shepherd-operator
   serviceName: shepherd-operator-controller-manager-service
   template:
     metadata:
+      annotations:
+        heritage: github.com/universityofadelaide/shepherd-operator
       labels:
         control-plane: controller-manager
         controller-tools.k8s.io: "1.0"
-        heritage: github.com/universityofadelaide/shepherd-operator
     spec:
       containers:
       - args:
@@ -93,7 +94,3 @@ spec:
         secret:
           defaultMode: 420
           secretName: shepherd-operator-webhook-server-secret
-  volumeClaimTemplates:
-    metadata:
-      labels:
-        heritage: github.com/universityofadelaide/shepherd-operator

@@ -8,8 +8,7 @@ namespace: shepherd-dev
 # field above.
 namePrefix: shepherd-operator-
 
-# Labels to add to all resources and selectors.
-commonLabels:
+commonAnnotations:
   heritage: "github.com/universityofadelaide/shepherd-operator"
 
 # Each entry in this list must resolve to an existing
