@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    heritage: github.com/universityofadelaide/shepherd-operator
+  name: shepherd-operator-webhook-server-secret
+  namespace: shepherd-dev
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+    heritage: github.com/universityofadelaide/shepherd-operator
+  name: shepherd-operator-controller-manager-service
+  namespace: shepherd-dev
+spec:
+  ports:
+  - port: 443
+  selector:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+    heritage: github.com/universityofadelaide/shepherd-operator
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+    heritage: github.com/universityofadelaide/shepherd-operator
+  name: shepherd-operator-controller-manager
+  namespace: shepherd-dev
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+      heritage: github.com/universityofadelaide/shepherd-operator
+  serviceName: shepherd-operator-controller-manager-service
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+        heritage: github.com/universityofadelaide/shepherd-operator
+    spec:
+      containers:
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --v=10
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.0
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+      - args:
+        - --metrics-addr=127.0.0.1:8080
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SECRET_NAME
+          value: shepherd-operator-webhook-server-secret
+        image: docker.io/uofa/shepherd-operator:latest
+        imagePullPolicy: Always
+        name: manager
+        ports:
+        - containerPort: 9876
+          name: webhook-server
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        volumeMounts:
+        - mountPath: /tmp/cert
+          name: cert
+          readOnly: true
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: shepherd-operator-webhook-server-secret
+  volumeClaimTemplates:
+    metadata:
+      labels:
+        heritage: github.com/universityofadelaide/shepherd-operator
