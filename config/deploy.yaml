@@ -86,6 +86,7 @@ spec:
         - mountPath: /tmp/cert
           name: cert
           readOnly: true
+      serviceAccount: shepherd
       terminationGracePeriodSeconds: 10
       volumes:
       - name: cert
