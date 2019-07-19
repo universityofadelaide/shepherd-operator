@@ -38,6 +38,7 @@ spec:
       containers:
       - command:
         - /manager
+        - --watch-namespace=shepherd-dev
         image: controller:latest
         imagePullPolicy: Always
         name: manager
