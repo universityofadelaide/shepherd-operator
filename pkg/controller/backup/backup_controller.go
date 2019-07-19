@@ -86,6 +86,7 @@ type ReconcileBackup struct {
 // +kubebuilder:rbac:groups=v1,resources=pods/log,verbs=get
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=batch,resources=jobs/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups/status,verbs=get;update;patch
 func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {

@@ -38,6 +38,18 @@ rules:
   - update
   - patch
 - apiGroups:
+  - batch
+  resources:
+  - jobs/finalizers
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
   - extension.shepherd
   resources:
   - backups
@@ -117,6 +129,18 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - batch
+  resources:
+  - jobs/finalizers
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - apps.openshift.io
   resources:
