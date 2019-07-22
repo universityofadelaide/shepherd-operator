@@ -112,13 +112,19 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 	if next.Before(now) || next.Equal(now) {
 		// Due for a backup - create object.
 		log.Info("Backup due - creating.")
-		var backup *extensionv1.Backup
-		backup.Name = fmt.Sprintf("%s-%d", backupScheduled.Name, now.Unix())
-		backup.Labels = backupScheduled.Labels
-		backup.Spec.MySQL = backupScheduled.Spec.MySQL
-		backup.Spec.Volumes = backupScheduled.Spec.Volumes
+		backup := &extensionv1.Backup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%d", backupScheduled.Name, now.Unix()),
+				Namespace: backupScheduled.Namespace,
+				Labels:    backupScheduled.Labels,
+			},
+			Spec: extensionv1.BackupSpec{
+				MySQL:   backupScheduled.Spec.MySQL,
+				Volumes: backupScheduled.Spec.Volumes,
+			},
+		}
 
-		result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, backup, sync.Backup(backup, r.scheme))
+		result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, backup, sync.Backup(backupScheduled, r.scheme))
 		if err != nil {
 			return reconcile.Result{
 				Requeue: true,
@@ -146,7 +152,7 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 
 	log.Info(fmt.Sprintf("Reconcile finished, requeued for %s", next.Format(time.RFC3339)))
 	return reconcile.Result{
-		RequeueAfter: time.Duration(nextDuration),
+		RequeueAfter: time.Duration(nextDuration) * time.Second,
 	}, nil
 }
 
