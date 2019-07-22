@@ -89,6 +89,7 @@ type ReconcileBackup struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=extension.shepherd,resources=backups/finalizers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log := logger.New(ControllerName, request.Namespace, request.Name)
 	log.Info("Starting reconcile loop")

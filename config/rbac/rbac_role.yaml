@@ -72,6 +72,18 @@ rules:
 - apiGroups:
   - extension.shepherd
   resources:
+  - backups/finalizers
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - extension.shepherd
+  resources:
   - backups
   verbs:
   - get
@@ -109,6 +121,18 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - extension.shepherd
+  resources:
+  - backupscheduleds/finalizers
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - batch
   resources:
@@ -167,6 +191,18 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - extension.shepherd
+  resources:
+  - restores/finalizers
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - admissionregistration.k8s.io
   resources:

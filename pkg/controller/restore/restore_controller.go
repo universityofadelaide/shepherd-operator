@@ -89,6 +89,7 @@ type ReconcileRestore struct {
 // +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get
 // +kubebuilder:rbac:groups=extension.shepherd,resources=restores,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=restores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=extension.shepherd,resources=restores/finalizers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log := logger.New(ControllerName, request.Namespace, request.Name)
 
