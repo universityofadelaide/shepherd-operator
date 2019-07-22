@@ -108,7 +108,12 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 	}
 
 	// Check if we are currently due for a backup to be scheduled.
-	next := cronexpr.MustParse(backupScheduled.Spec.Schedule).Next(status.LastExecutedTime.Time)
+	expr, err := cronexpr.Parse(backupScheduled.Spec.Schedule)
+	if err != nil {
+		log.Errorf("Cron schedule syntax is invalid: '%s'.", err.Error())
+		return reconcile.Result{}, err
+	}
+	next := expr.Next(status.LastExecutedTime.Time)
 	if next.Before(now) || next.Equal(now) {
 		// Due for a backup - create object.
 		log.Info("Backup due - creating.")

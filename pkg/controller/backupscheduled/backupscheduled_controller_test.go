@@ -127,6 +127,39 @@ func TestReconcileNoSchedule(t *testing.T) {
 	assert.Error(t, err, "BackupScheduled doesn't have a schedule.")
 }
 
+func TestReconcileInvalidSchedule(t *testing.T) {
+	apis.AddToScheme(scheme.Scheme)
+
+	instance := &extensionv1.BackupScheduled{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: corev1.NamespaceDefault,
+			Labels: map[string]string{
+				"site": "foo",
+			},
+		},
+		Spec: extensionv1.BackupScheduledSpec{
+			Schedule: "a b * * * * *",
+		},
+	}
+
+	// Query which will be used to find our BackupScheduled object.
+	query := types.NamespacedName{
+		Name:      instance.ObjectMeta.Name,
+		Namespace: instance.ObjectMeta.Namespace,
+	}
+
+	rd := &ReconcileBackupScheduled{
+		Client: fake.NewFakeClient(instance),
+		scheme: scheme.Scheme,
+	}
+
+	_, err := rd.Reconcile(reconcile.Request{
+		NamespacedName: query,
+	})
+	assert.Contains(t, err.Error(), "syntax error in ")
+}
+
 func TestGetScheduleComparison(t *testing.T) {
 	spec1 := extensionv1.BackupScheduledStatus{}
 	now1 := time.Now()
