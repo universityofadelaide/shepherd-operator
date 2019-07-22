@@ -3,6 +3,7 @@ package backupscheduled
 import (
 	"context"
 	"fmt"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
 	"time"
 
 	"github.com/go-test/deep"
@@ -122,6 +123,9 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 				Name:      fmt.Sprintf("%s-%d", backupScheduled.Name, now.Unix()),
 				Namespace: backupScheduled.Namespace,
 				Labels:    backupScheduled.Labels,
+				Annotations: map[string]string{
+					restic.FriendlyNameAnnotation: now.Format("Mon, 02/01/2006 - 15:04"),
+				},
 			},
 			Spec: extensionv1.BackupSpec{
 				MySQL:   backupScheduled.Spec.MySQL,
