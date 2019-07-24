@@ -41,6 +41,8 @@ func main() {
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
 
+	kingpin.Parse()
+
 	// Get a config to talk to the apiserver
 	log.Info("setting up client for manager")
 	cfg, err := config.GetConfig()
