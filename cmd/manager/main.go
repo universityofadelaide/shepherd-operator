@@ -18,6 +18,7 @@ package main
 
 import (
 	"os"
+	"fmt"
 
 	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
 	"github.com/universityofadelaide/shepherd-operator/pkg/controller"
@@ -46,6 +47,12 @@ func main() {
 	if err != nil {
 		log.Error(err, "unable to set up client config")
 		os.Exit(1)
+	}
+
+	if watchNamespace != nil {
+		log.Info(fmt.Sprintf("manager watching in namespace %s", *watchNamespace))
+	} else {
+		log.Info("manager watching in cluster scope")
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
