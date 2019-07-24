@@ -51,7 +51,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if watchNamespace != nil {
+	if *watchNamespace != "" {
 		log.Info(fmt.Sprintf("manager watching in namespace %s", *watchNamespace))
 	} else {
 		log.Info("manager watching in cluster scope")
