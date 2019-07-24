@@ -85,9 +85,11 @@ type ReconcileRestore struct {
 // Automatically generate RBAC rules to allow the Controller to read and write Jobs.
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=batch,resources=jobs/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get
 // +kubebuilder:rbac:groups=extension.shepherd,resources=restores,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=restores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=extension.shepherd,resources=restores/finalizers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log := logger.New(ControllerName, request.Namespace, request.Name)
 

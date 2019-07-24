@@ -29,14 +29,21 @@ run: generate fmt vet
 install: manifests
 	kubectl apply -f config/crds
 
+kustomize:
+	@echo "updating kustomize namespace"
+	sed -i'' -e 's@namespace: .*@namespace: '"${NAMESPACE}"'@' ./config/default/kustomization.yaml
+	kustomize build config/default -o ./config/deploy.yaml
+
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
-	kubectl apply -f config/crds
-	kustomize build config/default | kubectl apply -f -
+deploy: manifests install kustomize
+	kubectl apply -f ./config/deploy.yaml
 
 # Generate manifests e.g. CRD, RBAC etc.
+NAMESPACE=shepherd-dev
+SERVICE_ACCOUNT=shepherd
 manifests:
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go rbac --service-account=$(SERVICE_ACCOUNT) --service-account-namespace=$(NAMESPACE)
 
 # Run go fmt against code
 fmt:
