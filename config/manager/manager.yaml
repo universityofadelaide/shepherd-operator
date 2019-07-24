@@ -78,3 +78,24 @@ kind: Secret
 metadata:
   name: webhook-server-secret
   namespace: system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "restic-repository"
+  namespace: system
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+data:
+  password: eVBHWXlOMmI3N2pXdEZhb0FYVng=
+kind: Secret
+metadata:
+  name: shepherd-restic-secret
+  namespace: system
+type: Opaque
