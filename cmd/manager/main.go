@@ -17,8 +17,8 @@ limitations under the License.
 package main
 
 import (
-	"flag"
 	"os"
+	"fmt"
 
 	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
 	"github.com/universityofadelaide/shepherd-operator/pkg/controller"
@@ -28,14 +28,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	"gopkg.in/alecthomas/kingpin.v2"
+)
+
+var (
+	metricsAddr    = kingpin.Flag("metrics-addr", "The address the metric endpoint binds to.").Default(":8080").String()
+	watchNamespace = kingpin.Flag("watch-namespace", "The namespace in which objects will be watched.").Envar("WATCH_NAMESPACE").String()
 )
 
 func main() {
-	var metricsAddr string
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
+
+	kingpin.Parse()
 
 	// Get a config to talk to the apiserver
 	log.Info("setting up client for manager")
@@ -45,9 +51,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *watchNamespace != "" {
+		log.Info(fmt.Sprintf("manager watching in namespace %s", *watchNamespace))
+	} else {
+		log.Info("manager watching in cluster scope")
+	}
+
 	// Create a new Cmd to provide shared dependencies and start components
 	log.Info("setting up manager")
-	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: metricsAddr})
+	mgr, err := manager.New(cfg, manager.Options{
+		MetricsBindAddress: *metricsAddr,
+		Namespace:          *watchNamespace,
+	})
 	if err != nil {
 		log.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)

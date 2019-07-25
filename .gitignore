@@ -23,3 +23,5 @@ migration/migration
 *.swp
 *.swo
 *~
+config/deploy.yaml
+*.yaml-e

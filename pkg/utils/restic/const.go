@@ -14,3 +14,9 @@ const ResticSecretPasswordName = "shepherd-restic-secret"
 
 // ResticBackupContainerName is the name of the container in the restic backup pod.
 const ResticBackupContainerName = "restic-backup"
+
+// WebDirectory is working directory for the restore deployment step.
+const WebDirectory = "/code"
+
+// FriendlyNameAnnotation is the name of the annotation which stores the friendly name of a backup to display in the Shepherd UI.
+const FriendlyNameAnnotation = "backups.shepherd/friendly-name"
