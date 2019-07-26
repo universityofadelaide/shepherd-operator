@@ -20,15 +20,20 @@ const (
 	EnvMysqlPort     = "DATABASE_PORT"
 )
 
+var (
+	kubeconfig *string
+	namespace *string
+	dryRun *bool
+)
+
 func main() {
-	var kubeconfig *string
-	var namespace *string
 	if home := homeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 	namespace = flag.String("namespace", "", "the namespace to migrate")
+	dryRun = flag.Bool("dry-run", false, "when provided script will not modify objects")
 	flag.Parse()
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
@@ -39,6 +44,10 @@ func main() {
 	routeClient, err := routev1client.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
+	}
+
+	if *dryRun {
+		fmt.Println("------- DRY RUN -------")
 	}
 
 	fmt.Println("Starting migration")
@@ -152,10 +161,13 @@ func migrateSecretData(client *kubernetes.Clientset, pod v1.Pod, appLabel string
 	}
 	if needsUpdate {
 		fmt.Println("Updating Secret", secret.Name, "with db creds")
-		secret, err = client.CoreV1().Secrets(secret.Namespace).Update(secret)
-		if err != nil {
-			return nil, err
+		if !*dryRun {
+			secret, err = client.CoreV1().Secrets(secret.Namespace).Update(secret)
+			if err != nil {
+				return nil, err
+			}
 		}
+
 	} else {
 		fmt.Println("Secret", secret.Name, "didn't need updating")
 	}
@@ -186,10 +198,14 @@ func migrateServiceLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel stri
 	}
 	labels["app"] = appLabel
 	service.SetLabels(labels)
-	service, err = client.CoreV1().Services(service.Namespace).Update(service)
-	if err != nil {
-		return nil, err
+
+	if !*dryRun {
+		service, err = client.CoreV1().Services(service.Namespace).Update(service)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return service, nil
 }
 
@@ -224,9 +240,12 @@ func migratePvcLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel string, 
 		}
 		labels["app"] = appLabel
 		pvc.SetLabels(labels)
-		pvc, err = client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Update(pvc)
-		if err != nil {
-			return nil, err
+		if !*dryRun {
+			pvc, err = client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Update(pvc)
+
+			if err != nil {
+				return nil, err
+			}
 		}
 		return pvc, nil
 	}
@@ -255,9 +274,11 @@ func migrateRouteLabel(client *routev1client.RouteV1Client, pod v1.Pod, appLabel
 	}
 	labels["app"] = appLabel
 	route.SetLabels(labels)
-	route, err = client.Routes(route.Namespace).Update(route)
-	if err != nil {
-		return nil, err
+	if !*dryRun {
+		route, err = client.Routes(route.Namespace).Update(route)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return route, nil
 }
