@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"time"
 )
 
 const (
@@ -112,6 +113,28 @@ func main() {
 		if pvc != nil {
 			pvcsChecked = append(pvcsChecked, pvc.Name)
 		}
+
+		// Check if changes above triggered a redeploy and wait for it to complete.
+		for {
+			dcRefresh, err := osclient.DeploymentConfigs(*namespace).Get(dc.Name, metav1.GetOptions{})
+			if err != nil {
+				fmt.Println(err.Error())
+				break;
+			}
+
+			if dc.Generation == dcRefresh.Generation {
+				break;
+			}
+
+			if dcRefresh.Status.ObservedGeneration == dcRefresh.Generation {
+				fmt.Println("Deployment completed!")
+				break;
+			}
+
+			fmt.Println("... waiting for deployment to complete ...")
+			time.Sleep(5 * time.Second)
+		}
+
 	}
 	fmt.Println("Completed migration")
 }
