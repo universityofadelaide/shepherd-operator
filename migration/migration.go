@@ -3,14 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+
 	routev1 "github.com/openshift/api/route/v1"
 	routev1client "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
+	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"path/filepath"
 )
 
 const (
@@ -45,13 +47,20 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
+	osclient, err := osv1client.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
 
 	if *dryRun {
-		fmt.Println("------- DRY RUN -------")
+		fmt.Println("------------ DRY RUN ------------")
+		fmt.Println("-- No objects will be modified --")
+		fmt.Println("---------------------------------")
 	}
 
 	fmt.Println("Starting migration")
-	pods, err := client.CoreV1().Pods(*namespace).List(metav1.ListOptions{})
+
+	deployConfigs, err := osclient.DeploymentConfigs(*namespace).List(metav1.ListOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -60,14 +69,15 @@ func main() {
 	var servicesChecked []string
 	var routesChecked []string
 	var pvcsChecked []string
-	for _, pod := range pods.Items {
-		fmt.Println("---Checking Pod", pod.Name)
+	for _, dc := range deployConfigs.Items {
+		pod := dc.Spec.Template
+		fmt.Println("---Checking DeployConfig", dc.Name)
 		if _, found := pod.ObjectMeta.GetLabels()["app"]; !found {
-			fmt.Println("Skipping Pod", pod.Name, "as it doesn't have an app label")
+			fmt.Println("Skipping Pod", dc.Name, "as it doesn't have an app label")
 			continue
 		}
 		appLabel := pod.ObjectMeta.GetLabels()["app"]
-		fmt.Println("--Checking Secret for", pod.Name)
+		fmt.Println("--Checking Secret for", dc.Name)
 		secret, err := migrateSecretData(client, pod, appLabel, secretsChecked)
 		if err != nil {
 			panic(err)
@@ -76,7 +86,7 @@ func main() {
 			secretsChecked = append(secretsChecked, secret.Name)
 		}
 
-		fmt.Println("--Checking Service for", pod.Name)
+		fmt.Println("--Checking Service for", dc.Name)
 		service, err := migrateServiceLabel(client, pod, appLabel, servicesChecked)
 		if err != nil {
 			panic(err)
@@ -85,7 +95,7 @@ func main() {
 			servicesChecked = append(servicesChecked, service.Name)
 		}
 
-		fmt.Println("--Checking Route for", pod.Name)
+		fmt.Println("--Checking Route for", dc.Name)
 		route, err := migrateRouteLabel(routeClient, pod, appLabel, routesChecked)
 		if err != nil {
 			panic(err)
@@ -94,7 +104,7 @@ func main() {
 			routesChecked = append(routesChecked, route.Name)
 		}
 
-		fmt.Println("--Checking shared PVC for", pod.Name)
+		fmt.Println("--Checking shared PVC for", dc.Name)
 		pvc, err := migratePvcLabel(client, pod, appLabel, pvcsChecked)
 		if err != nil {
 			panic(err)
@@ -107,23 +117,24 @@ func main() {
 }
 
 // migrateSecretData migrates data from env vars on Pods into secrets.
-func migrateSecretData(client *kubernetes.Clientset, pod v1.Pod, appLabel string, secretsChecked []string) (*v1.Secret, error) {
+func migrateSecretData(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, appLabel string, secretsChecked []string) (*v1.Secret, error) {
+	name := pod.Spec.Containers[0].Name
 	requiredEnv := []string{
 		EnvMysqlHost,
 		EnvMysqlUsername,
 		EnvMysqlDatabase,
 		EnvMysqlPort,
 	}
-	secret, err := client.CoreV1().Secrets(pod.Namespace).Get(appLabel, metav1.GetOptions{})
+	secret, err := client.CoreV1().Secrets(*namespace).Get(appLabel, metav1.GetOptions{})
 	if err != nil {
-		fmt.Println("Skipping Pod", pod.Name, "as it doesn't have a Secret matching its app label")
+		fmt.Println("Skipping Pod", name, "as it doesn't have a Secret matching its app label")
 		return nil, nil
 	}
 	if Contains(secretsChecked, secret.Name) {
-		fmt.Println("Skipping Pod", pod.Name, "as the secret has already been checked")
+		fmt.Println("Skipping Pod", name, "as the secret has already been checked")
 		return nil, nil
 	}
-	fmt.Println("Pod", pod.Name, "found with secret that may need updating")
+	fmt.Println("Pod", name, "found with secret that may need updating")
 
 	container := pod.Spec.Containers[0]
 	foundEnvs := make(map[string]string, len(requiredEnv))
@@ -133,7 +144,7 @@ func migrateSecretData(client *kubernetes.Clientset, pod v1.Pod, appLabel string
 		}
 	}
 	if len(requiredEnv) != len(foundEnvs) {
-		fmt.Println("Skipping Pod", pod.Name, "as it doesn't have all required env vars")
+		fmt.Println("Skipping Pod", name, "as it doesn't have all required env vars")
 		return secret, nil
 	}
 
@@ -175,12 +186,13 @@ func migrateSecretData(client *kubernetes.Clientset, pod v1.Pod, appLabel string
 }
 
 // migrateServiceLabel migrates services to add the app label.
-func migrateServiceLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel string, servicesChecked []string) (*v1.Service, error) {
+func migrateServiceLabel(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, appLabel string, servicesChecked []string) (*v1.Service, error) {
 	// Pass in the container name here as redis pods have services too but have the same app label
 	// as the web pod.
-	service, err := client.CoreV1().Services(pod.Namespace).Get(pod.Spec.Containers[0].Name, metav1.GetOptions{})
+	serviceName := pod.Spec.Containers[0].Name
+	service, err := client.CoreV1().Services(*namespace).Get(serviceName, metav1.GetOptions{})
 	if err != nil {
-		fmt.Println("Skipping Pod", pod.Name, "as it doesn't have a Service matching container name")
+		fmt.Println("Skipping Pod", serviceName, "as it doesn't have a Service matching container name")
 		return nil, nil
 	}
 	if Contains(servicesChecked, service.Name) {
@@ -210,7 +222,8 @@ func migrateServiceLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel stri
 }
 
 // migratePvcLabel migrates pvcs to add the app label.
-func migratePvcLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel string, pvcsChecked []string) (*v1.PersistentVolumeClaim, error) {
+func migratePvcLabel(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, appLabel string, pvcsChecked []string) (*v1.PersistentVolumeClaim, error) {
+	name := pod.Spec.Containers[0].Name
 	for _, volume := range pod.Spec.Volumes {
 		// Not a PVC claim, skip.
 		if volume.PersistentVolumeClaim == nil {
@@ -220,9 +233,9 @@ func migratePvcLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel string, 
 		if volume.PersistentVolumeClaim.ClaimName != fmt.Sprintf("%s-shared", appLabel) {
 			continue
 		}
-		pvc, err := client.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(volume.PersistentVolumeClaim.ClaimName, metav1.GetOptions{})
+		pvc, err := client.CoreV1().PersistentVolumeClaims(*namespace).Get(volume.PersistentVolumeClaim.ClaimName, metav1.GetOptions{})
 		if err != nil {
-			fmt.Println("Skipping Pod", pod.Name, "as there was an error loading its shared pvc")
+			fmt.Println("Skipping Pod", name, "as there was an error loading its shared pvc")
 			return nil, nil
 		}
 		if Contains(pvcsChecked, pvc.Name) {
@@ -253,10 +266,11 @@ func migratePvcLabel(client *kubernetes.Clientset, pod v1.Pod, appLabel string, 
 }
 
 // migrateRouteLabel migrates routes to add the app label.
-func migrateRouteLabel(client *routev1client.RouteV1Client, pod v1.Pod, appLabel string, routesChecked []string) (*routev1.Route, error) {
-	route, err := client.Routes(pod.Namespace).Get(appLabel, metav1.GetOptions{})
+func migrateRouteLabel(client *routev1client.RouteV1Client, pod *v1.PodTemplateSpec, appLabel string, routesChecked []string) (*routev1.Route, error) {
+	name := pod.Spec.Containers[0].Name
+	route, err := client.Routes(*namespace).Get(appLabel, metav1.GetOptions{})
 	if err != nil {
-		fmt.Println("Skipping Pod", pod.Name, "as it doesn't have a Route matching its app label")
+		fmt.Println("Skipping Pod", name, "as it doesn't have a Route matching its app label")
 		return nil, nil
 	}
 	if Contains(routesChecked, route.Name) {
