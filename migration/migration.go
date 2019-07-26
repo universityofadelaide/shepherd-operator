@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	routev1 "github.com/openshift/api/route/v1"
 	routev1client "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
@@ -13,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"time"
 )
 
 const (
@@ -72,13 +72,13 @@ func main() {
 	var pvcsChecked []string
 	for _, dc := range deployConfigs.Items {
 		pod := dc.Spec.Template
-		fmt.Println("---Checking DeployConfig", dc.Name)
+		fmt.Println("- Checking DeployConfig", dc.Name)
 		if _, found := pod.ObjectMeta.GetLabels()["app"]; !found {
-			fmt.Println("Skipping Pod", dc.Name, "as it doesn't have an app label")
+			fmt.Println("  Skipping Pod", dc.Name, "as it doesn't have an app label")
 			continue
 		}
 		appLabel := pod.ObjectMeta.GetLabels()["app"]
-		fmt.Println("--Checking Secret for", dc.Name)
+		fmt.Println("- Checking Secret for", dc.Name)
 		secret, err := migrateSecretData(client, pod, appLabel, secretsChecked)
 		if err != nil {
 			panic(err)
@@ -87,7 +87,7 @@ func main() {
 			secretsChecked = append(secretsChecked, secret.Name)
 		}
 
-		fmt.Println("--Checking Service for", dc.Name)
+		fmt.Println("- Checking Service for", dc.Name)
 		service, err := migrateServiceLabel(client, pod, appLabel, servicesChecked)
 		if err != nil {
 			panic(err)
@@ -96,7 +96,7 @@ func main() {
 			servicesChecked = append(servicesChecked, service.Name)
 		}
 
-		fmt.Println("--Checking Route for", dc.Name)
+		fmt.Println("- Checking Route for", dc.Name)
 		route, err := migrateRouteLabel(routeClient, pod, appLabel, routesChecked)
 		if err != nil {
 			panic(err)
@@ -105,7 +105,7 @@ func main() {
 			routesChecked = append(routesChecked, route.Name)
 		}
 
-		fmt.Println("--Checking shared PVC for", dc.Name)
+		fmt.Println("- Checking shared PVC for", dc.Name)
 		pvc, err := migratePvcLabel(client, pod, appLabel, pvcsChecked)
 		if err != nil {
 			panic(err)
@@ -131,7 +131,7 @@ func main() {
 				break;
 			}
 
-			fmt.Println("... waiting for deployment to complete ...")
+			fmt.Println("  ... waiting for deployment to complete ...")
 			time.Sleep(5 * time.Second)
 		}
 
@@ -150,14 +150,14 @@ func migrateSecretData(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, ap
 	}
 	secret, err := client.CoreV1().Secrets(*namespace).Get(appLabel, metav1.GetOptions{})
 	if err != nil {
-		fmt.Println("Skipping Pod", name, "as it doesn't have a Secret matching its app label")
+		fmt.Println("  Skipping Pod", name, "as it doesn't have a Secret matching its app label")
 		return nil, nil
 	}
 	if Contains(secretsChecked, secret.Name) {
-		fmt.Println("Skipping Pod", name, "as the secret has already been checked")
+		fmt.Println("  Skipping Pod", name, "as the secret has already been checked")
 		return nil, nil
 	}
-	fmt.Println("Pod", name, "found with secret that may need updating")
+	fmt.Println("  Pod", name, "found with secret that may need updating")
 
 	container := pod.Spec.Containers[0]
 	foundEnvs := make(map[string]string, len(requiredEnv))
@@ -167,11 +167,11 @@ func migrateSecretData(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, ap
 		}
 	}
 	if len(requiredEnv) != len(foundEnvs) {
-		fmt.Println("Skipping Pod", name, "as it doesn't have all required env vars")
+		fmt.Println("  Skipping Pod", name, "as it doesn't have all required env vars")
 		return secret, nil
 	}
 
-	fmt.Println("Checking Secret", secret.Name, "if it needs an update")
+	fmt.Println("  Checking Secret", secret.Name, "if it needs an update")
 	needsUpdate := false
 	for key, value := range foundEnvs {
 		if _, found := secret.Data[key]; !found {
@@ -180,11 +180,11 @@ func migrateSecretData(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, ap
 				secret.StringData = make(map[string]string, len(secret.Data))
 			}
 			secret.StringData[key] = value
-			fmt.Println("Setting", key, "in Secret", secret.Name)
+			fmt.Println("    Setting", key, "in Secret", secret.Name)
 		}
 	}
 	if _, found := secret.ObjectMeta.GetLabels()["app"]; !found {
-		fmt.Println("Secret", secret.Name, "doesn't have an app label, setting it")
+		fmt.Println("  Secret", secret.Name, "doesn't have an app label, setting it")
 		labels := secret.GetLabels()
 		if len(labels) == 0 {
 			labels = make(map[string]string)
@@ -194,7 +194,7 @@ func migrateSecretData(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, ap
 		needsUpdate = true
 	}
 	if needsUpdate {
-		fmt.Println("Updating Secret", secret.Name, "with db creds")
+		fmt.Println("  Updating Secret", secret.Name, "with db creds")
 		if !*dryRun {
 			secret, err = client.CoreV1().Secrets(secret.Namespace).Update(secret)
 			if err != nil {
@@ -203,7 +203,7 @@ func migrateSecretData(client *kubernetes.Clientset, pod *v1.PodTemplateSpec, ap
 		}
 
 	} else {
-		fmt.Println("Secret", secret.Name, "didn't need updating")
+		fmt.Println("  Secret", secret.Name, "didn't need updating")
 	}
 	return secret, nil
 }
@@ -293,18 +293,18 @@ func migrateRouteLabel(client *routev1client.RouteV1Client, pod *v1.PodTemplateS
 	name := pod.Spec.Containers[0].Name
 	route, err := client.Routes(*namespace).Get(appLabel, metav1.GetOptions{})
 	if err != nil {
-		fmt.Println("Skipping Pod", name, "as it doesn't have a Route matching its app label")
+		fmt.Println("  Skipping Pod", name, "as it doesn't have a Route matching its app label")
 		return nil, nil
 	}
 	if Contains(routesChecked, route.Name) {
-		fmt.Println("Skipping Route", route.Name, "as it has already been checked")
+		fmt.Println("  Skipping Route", route.Name, "as it has already been checked")
 		return nil, nil
 	}
 	if _, found := route.ObjectMeta.GetLabels()["app"]; found {
-		fmt.Println("Skipping Route", route.Name, "as it already has an app label")
+		fmt.Println("  Skipping Route", route.Name, "as it already has an app label")
 		return route, nil
 	}
-	fmt.Println("Updating Route", route.Name, "with app label")
+	fmt.Println("  Updating Route", route.Name, "with app label")
 	labels := route.GetLabels()
 	if len(labels) == 0 {
 		labels = make(map[string]string)
