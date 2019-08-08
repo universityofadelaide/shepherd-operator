@@ -376,7 +376,7 @@ func TestPodSpecRestore(t *testing.T) {
 					"/bin/sh", "-c",
 				},
 				Args: []string{
-					"restic dump abcd1234 /mysql/mysql1.sql > ./mysql/mysql1.sql",
+					"restic dump --quiet abcd1234 /mysql/mysql1.sql > ./mysql/mysql1.sql",
 				},
 				Env: []corev1.EnvVar{
 					{

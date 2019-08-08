@@ -17,8 +17,8 @@ limitations under the License.
 package main
 
 import (
-	"os"
 	"fmt"
+	"os"
 
 	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
 	"github.com/universityofadelaide/shepherd-operator/pkg/controller"
