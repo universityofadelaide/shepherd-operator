@@ -211,7 +211,7 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 			},
 			Args: []string{
 				helper.TprintfMustParse(
-					"restic dump {{.ResticId}} /{{.SQLPath}} > ./{{.SQLPath}}",
+					"restic dump --quiet {{.ResticId}} /{{.SQLPath}} > ./{{.SQLPath}}",
 					map[string]interface{}{
 						"ResticId": resticId,
 						"SQLPath":  fmt.Sprintf("mysql/%s.sql", mysqlName),
