@@ -55,19 +55,25 @@ TODO
 
 ## Cluster Setup
 
-1. Install the CRD.
+1. Configure your namespace as required. Used for RBAC rules and defaults to 'myproject' (for local development).
+    ```
+    export NAMESPACE=shepherd-dev
+    make kustomize
+    ```
+
+2. Install the CRD.
     ```
     make install
     ```
-1. Review the RBAC and manager manifests, ensure you are happy with rbac / jobs etc..
+3. Review the RBAC and manager manifests, ensure you are happy with rbac / jobs etc..
     ```
     less config/rbac/rbac_role.yaml
     ```
-1. Install RBAC rules and manager.
+4. Install RBAC rules and manager.
     ```
     kubectl apply -f config/rbac
     ```
-1. Configure RBAC rules for accounts which should have access to create Backup/Restore objects (i.e. shepherd service account)
+5. Configure RBAC rules for accounts which should have access to create Backup/Restore objects (i.e. shepherd service account)
     ```
     oc create clusterrole shepherd-backups --verb=get,list,create,update,delete --resource=backups,restores
     oc adm policy add-cluster-role-to-user shepherd-backups --serviceaccount=shepherd
