@@ -27,9 +27,10 @@ manager: generate fmt vet
 run: generate fmt vet
 	go run ./cmd/manager/main.go
 
-# Install CRDs into a cluster
+# Install CRDs and RBAC into a cluster
 install: manifests
 	kubectl apply -f config/crds
+	kubectl apply -f config/rbac
 
 kustomize:
 	@echo "updating kustomize namespace to ${NAMESPACE}"

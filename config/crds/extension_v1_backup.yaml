@@ -6,6 +6,10 @@ metadata:
     controller-tools.k8s.io: "1.0"
   name: backups.extension.shepherd
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.phase
+    name: Status
+    type: string
   group: extension.shepherd
   names:
     kind: Backup
@@ -52,11 +56,6 @@ spec:
           required:
           - phase
           type: object
-  additionalPrinterColumns:
-    - name: Status
-      type: string
-      description: Status of a backup.
-      JSONPath: .status.phase
   version: v1
 status:
   acceptedNames:

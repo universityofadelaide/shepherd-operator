@@ -99,7 +99,8 @@ To get started developing this operator, ensure you the following prerequisites:
 * An IDE such as VSCode or Goland is recommended 👍
 
 1. Clone the repo to `$GOPATH/src/github.com/universityofadelaide/shepherd-operator`
-1. Run `make install` to set up the CRD on minishift
-1. Run `make run` to compile the local workspace and run the operator. Keep it running for the next few steps.
-1. Backup an environment via the Shepherd UI.
-1. Run `oc get jobs` to check out the jobs that were created.
+2. Login as cluster admin `oc login -u system:admin`
+3. Run `make install` to set up the CRD in your local OpenShift.
+4. Run `make run` to compile the local workspace and run the operator. Keep it running for the next few steps.
+5. Backup an environment via the Shepherd UI.
+6. Run `oc get jobs` to check out the jobs that were created.
