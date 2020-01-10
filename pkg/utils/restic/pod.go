@@ -156,10 +156,10 @@ func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId stri
 			Env:        mysqlEnvVars(mysqlStatus),
 			WorkingDir: params.WorkingDir,
 			Command: []string{
-				"database-backup",
+				"/bin/sh", "-c",
 			},
 			Args: []string{
-				fmt.Sprintf("mysql/%s.sql", mysqlName),
+				fmt.Sprintf("database-backup > mysql/%s.sql", mysqlName),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
