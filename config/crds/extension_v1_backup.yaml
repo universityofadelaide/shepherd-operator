@@ -52,6 +52,11 @@ spec:
           required:
           - phase
           type: object
+  additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: Status of a backup.
+      JSONPath: .status.phase
   version: v1
 status:
   acceptedNames:
