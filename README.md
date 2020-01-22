@@ -61,19 +61,11 @@ TODO
     make kustomize
     ```
 
-2. Install the CRD.
+2. Install the CRD and RBAC.
     ```
     make install
     ```
-3. Review the RBAC and manager manifests, ensure you are happy with rbac / jobs etc..
-    ```
-    less config/rbac/rbac_role.yaml
-    ```
-4. Install RBAC rules and manager.
-    ```
-    kubectl apply -f config/rbac
-    ```
-5. Configure RBAC rules for accounts which should have access to create Backup/Restore objects (i.e. shepherd service account)
+3. Configure RBAC rules for accounts which should have access to create Backup/Restore objects (i.e. shepherd service account)
     ```
     oc create clusterrole shepherd-backups --verb=get,list,create,update,delete --resource=backups,restores
     oc adm policy add-cluster-role-to-user shepherd-backups --serviceaccount=shepherd
