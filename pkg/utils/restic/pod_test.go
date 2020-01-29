@@ -160,10 +160,10 @@ func TestPodSpecBackup(t *testing.T) {
 				},
 				WorkingDir: "/home/test",
 				Command: []string{
-					"database-backup",
+					"/bin/sh", "-c",
 				},
 				Args: []string{
-					"mysql/mysql1.sql",
+					"database-backup > mysql/mysql1.sql",
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

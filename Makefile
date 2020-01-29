@@ -1,6 +1,8 @@
 
 # Image URL to use all building/pushing image targets
 IMG ?= docker.io/uofa/shepherd-operator:latest
+NAMESPACE ?= myproject
+SERVICE_ACCOUNT=shepherd
 
 # Disable go modules (use dep)
 export GO111MODULE=off
@@ -25,12 +27,13 @@ manager: generate fmt vet
 run: generate fmt vet
 	go run ./cmd/manager/main.go
 
-# Install CRDs into a cluster
+# Install CRDs and RBAC into a cluster
 install: manifests
 	kubectl apply -f config/crds
+	kubectl apply -f config/rbac
 
 kustomize:
-	@echo "updating kustomize namespace"
+	@echo "updating kustomize namespace to ${NAMESPACE}"
 	sed -i'' -e 's@namespace: .*@namespace: '"${NAMESPACE}"'@' ./config/default/kustomization.yaml
 	kustomize build config/default -o ./config/deploy.yaml
 
@@ -39,8 +42,6 @@ deploy: manifests install kustomize
 	kubectl apply -f ./config/deploy.yaml
 
 # Generate manifests e.g. CRD, RBAC etc.
-NAMESPACE=shepherd-dev
-SERVICE_ACCOUNT=shepherd
 manifests:
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go rbac --service-account=$(SERVICE_ACCOUNT) --service-account-namespace=$(NAMESPACE)

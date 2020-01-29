@@ -17,15 +17,15 @@ import (
 
 const (
 	// EnvMySQLHostname for MySQL connection.
-	EnvMySQLHostname = "DATABASE_HOST"
+	EnvMySQLHostname = "MYSQL_HOSTNAME"
 	// EnvMySQLDatabase for MySQL connection.
-	EnvMySQLDatabase = "DATABASE_NAME"
+	EnvMySQLDatabase = "MYSQL_DATABASE"
 	// EnvMySQLPort for MySQL connection.
-	EnvMySQLPort = "DATABASE_PORT"
+	EnvMySQLPort = "MYSQL_PORT"
 	// EnvMySQLUsername for MySQL connection.
-	EnvMySQLUsername = "DATABASE_USER"
+	EnvMySQLUsername = "MYSQL_USERNAME"
 	// EnvMySQLPassword for MySQL connection.
-	EnvMySQLPassword = "DATABASE_PASSWORD"
+	EnvMySQLPassword = "MYSQL_PASSWORD"
 
 	// VolumeMySQL identifier for mysql storage.
 	VolumeMySQL = "restic-mysql"
@@ -156,10 +156,10 @@ func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId stri
 			Env:        mysqlEnvVars(mysqlStatus),
 			WorkingDir: params.WorkingDir,
 			Command: []string{
-				"database-backup",
+				"/bin/sh", "-c",
 			},
 			Args: []string{
-				fmt.Sprintf("mysql/%s.sql", mysqlName),
+				fmt.Sprintf("database-backup > mysql/%s.sql", mysqlName),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
