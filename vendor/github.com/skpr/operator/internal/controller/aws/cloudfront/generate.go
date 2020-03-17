@@ -12,12 +12,19 @@ import (
 const (
 	// OriginID which maps behaviors to origins.
 	OriginID = "skpr"
+	// TagLogGroup is used to determine the destination for the logs.
+	TagLogGroup = "edge.skpr.io/loggroup"
+	// TagLogStream is used to determine the destination for the logs.
+	TagLogStream = "edge.skpr.io/logstream"
 )
 
 // Helper function to generate a CloudFront distribution.
 // This object is really large due to required fields when updating the Distribution eg. FieldLevelEncryptionId
-func generateDistribution(prefix string, instance *awsv1beta1.CloudFront) (*cloudfront.DistributionConfig, error) {
-	reference := fmt.Sprintf("%s-%s-%s", prefix, instance.ObjectMeta.Namespace, instance.ObjectMeta.Name)
+func generateDistributionWithTags(params Params, instance *awsv1beta1.CloudFront) (*cloudfront.DistributionConfig, *cloudfront.Tags, error) {
+	var (
+		logGroup  = fmt.Sprintf("%s-%s", params.Prefix, instance.ObjectMeta.Namespace)
+		logStream = fmt.Sprintf("%s-cloudfront", instance.ObjectMeta.Name)
+	)
 
 	behavior := &cloudfront.DefaultCacheBehavior{
 		Compress:               aws.Bool(true),
@@ -103,7 +110,7 @@ func generateDistribution(prefix string, instance *awsv1beta1.CloudFront) (*clou
 
 	distribution := &cloudfront.DistributionConfig{
 		Enabled:         aws.Bool(true),
-		CallerReference: aws.String(reference),
+		CallerReference: aws.String(instance.Status.CallerReference),
 		Comment:         aws.String("Automatically provisioned by github.com/skpr/operator"),
 		IsIPV6Enabled:   aws.Bool(true),
 		PriceClass:      aws.String(cloudfront.PriceClassPriceClassAll),
@@ -161,17 +168,24 @@ func generateDistribution(prefix string, instance *awsv1beta1.CloudFront) (*clou
 			Quantity: aws.Int64(0),
 		},
 		Logging: &cloudfront.LoggingConfig{
-			Enabled:        aws.Bool(false),
-			Bucket:         aws.String(""), // @todo, Automatically provision bucket.
-			Prefix:         aws.String(""), // @todo, Automatically provision bucket.
+			Enabled: aws.Bool(false),
+			// See below for this
+			Bucket:         aws.String(""),
+			Prefix:         aws.String(""),
 			IncludeCookies: aws.Bool(false),
 		},
 		WebACLId: aws.String(instance.Spec.Firewall.ARN),
 		ViewerCertificate: &cloudfront.ViewerCertificate{
 			CertificateSource:            aws.String(cloudfront.CertificateSourceCloudfront),
 			CloudFrontDefaultCertificate: aws.Bool(true),
-			MinimumProtocolVersion:       aws.String(cloudfront.MinimumProtocolVersionTlsv1),
+			MinimumProtocolVersion:       aws.String(cloudfront.MinimumProtocolVersionTlsv112016),
 		},
+	}
+
+	if params.LoggingBucket != "" {
+		distribution.Logging.Enabled = aws.Bool(true)
+		distribution.Logging.Bucket = aws.String(params.LoggingBucket)
+		distribution.Logging.Prefix = aws.String(instance.Status.CallerReference)
 	}
 
 	if len(instance.Spec.Aliases) > 0 {
@@ -183,7 +197,7 @@ func generateDistribution(prefix string, instance *awsv1beta1.CloudFront) (*clou
 			Certificate:            aws.String(instance.Spec.Certificate.ARN),
 			ACMCertificateArn:      aws.String(instance.Spec.Certificate.ARN),
 			CertificateSource:      aws.String(cloudfront.CertificateSourceAcm),
-			MinimumProtocolVersion: aws.String(cloudfront.MinimumProtocolVersionTlsv1),
+			MinimumProtocolVersion: aws.String(cloudfront.MinimumProtocolVersionTlsv112016),
 			SSLSupportMethod:       aws.String(cloudfront.SSLSupportMethodSniOnly),
 		}
 
@@ -191,5 +205,18 @@ func generateDistribution(prefix string, instance *awsv1beta1.CloudFront) (*clou
 		distribution.DefaultCacheBehavior.ViewerProtocolPolicy = aws.String(cloudfront.ViewerProtocolPolicyRedirectToHttps)
 	}
 
-	return distribution, nil
+	tags := &cloudfront.Tags{
+		Items: []*cloudfront.Tag{
+			{
+				Key:   aws.String(TagLogGroup),
+				Value: aws.String(logGroup),
+			},
+			{
+				Key:   aws.String(TagLogStream),
+				Value: aws.String(logStream),
+			},
+		},
+	}
+
+	return distribution, tags, nil
 }

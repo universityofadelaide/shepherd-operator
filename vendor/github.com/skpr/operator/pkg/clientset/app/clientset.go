@@ -6,11 +6,21 @@ import (
 	"k8s.io/client-go/rest"
 
 	appv1beta1 "github.com/skpr/operator/pkg/apis/app/v1beta1"
+	"github.com/skpr/operator/pkg/clientset/app/drupal"
 )
 
-// ClientInterface for interacting with AWS subclients.
-type ClientInterface interface {
-	Drupals(namespace string) DrupalInterface
+const (
+	// Group which this clientset interacts with.
+	Group = "apps.skpr.io"
+	// Version which this clientset interacts with.
+	Version = "v1beta1"
+	// APIVersion which this clientset interacts with.
+	APIVersion = "apps.skpr.io/v1beta1"
+)
+
+// Interface for interacting with AWS subclients.
+type Interface interface {
+	Drupals(namespace string) drupal.Interface
 }
 
 // Client for interacting with Operator objects.
@@ -35,8 +45,8 @@ func NewForConfig(c *rest.Config) (*Client, error) {
 }
 
 // Drupals within a namespace.
-func (c *Client) Drupals(namespace string) DrupalInterface {
-	return &drupalClient{
+func (c *Client) Drupals(namespace string) drupal.Interface {
+	return &drupal.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}

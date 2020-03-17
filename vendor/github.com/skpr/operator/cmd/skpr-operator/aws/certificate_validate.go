@@ -35,7 +35,16 @@ func (d *CertificateValidateCommand) run(c *kingpin.ParseContext) error {
 func CertificateValidate(app *kingpin.CmdClause) {
 	c := &CertificateValidateCommand{}
 	cmd := app.Command("certificate-validate", "Start the AWS CertificateValidate operator").Action(c.run)
-	cmd.Flag("zone", "Zone identifier for Route 53").Envar("SKPR_OPERATOR_CERTIFICATE_VALIDATE_ZONE").Required().StringVar(&c.params.Zone)
-	cmd.Flag("domain", "Domain which this operator will add validation records for").Envar("SKPR_OPERATOR_CERTIFICATE_VALIDATE_DOMAIN").Required().StringVar(&c.params.Domain)
-	cmd.Flag("ttl", "TTL which will be applied to DNS entries").Envar("SKPR_OPERATOR_CERTIFICATE_VALIDATE_TTL").Default("300").Int64Var(&c.params.TTL)
+	cmd.Flag("zone", "Zone identifier for Route 53").
+		Envar("SKPR_OPERATOR_CERTIFICATE_VALIDATE_ZONE").
+		Required().
+		StringVar(&c.params.Zone)
+	cmd.Flag("domain", "Domain which this operator will add validation records for").
+		Envar("SKPR_OPERATOR_CERTIFICATE_VALIDATE_DOMAIN").
+		Required().
+		StringVar(&c.params.Domain)
+	cmd.Flag("ttl", "TTL which will be applied to DNS entries").
+		Envar("SKPR_OPERATOR_CERTIFICATE_VALIDATE_TTL").
+		Default("300").
+		Int64Var(&c.params.TTL)
 }

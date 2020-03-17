@@ -12,16 +12,31 @@ import (
 
 // DrupalCommand provides context for "drupal" command
 type DrupalCommand struct {
-	Nginx DrupalCommandExporter
-	FPM   DrupalCommandExporter
+	Metrics Metrics
 }
 
-// DrupalCommandExporter contains admin details for running application exporters.
-type DrupalCommandExporter struct {
+// Exporter which is used by Prometheus.
+type Exporter struct {
 	Image  string
 	Port   string
 	CPU    string
 	Memory string
+}
+
+// Metrics used for autoscaling.
+type Metrics struct {
+	FPM Metric
+}
+
+// Metric used for autoscaling.
+type Metric struct {
+	Name     string
+	Image    string
+	CPU      string
+	Memory   string
+	Protocol string
+	Port     string
+	Path     string
 }
 
 func (ctx *DrupalCommand) run(c *kingpin.ParseContext) error {
@@ -30,42 +45,19 @@ func (ctx *DrupalCommand) run(c *kingpin.ParseContext) error {
 		return errors.Wrap(err, "cannot setup manager")
 	}
 
-	nginxCPU, err := resource.ParseQuantity(ctx.Nginx.CPU)
-	if err != nil {
-		return errors.Wrap(err, "cannot parse Nginx exporter CPU")
-	}
-
-	nginxMemory, err := resource.ParseQuantity(ctx.Nginx.Memory)
-	if err != nil {
-		return errors.Wrap(err, "cannot parse Nginx exporter memory")
-	}
-
-	fpmCPU, err := resource.ParseQuantity(ctx.FPM.CPU)
-	if err != nil {
-		return errors.Wrap(err, "cannot parse FPM exporter CPU")
-	}
-
-	fpmMemory, err := resource.ParseQuantity(ctx.FPM.Memory)
-	if err != nil {
-		return errors.Wrap(err, "cannot parse FPM exporter memory")
-	}
-
-	exporters := drupal.Exporters{
-		Nginx: drupal.Exporter{
-			Image:  ctx.Nginx.Image,
-			Port:   ctx.Nginx.Port,
-			CPU:    nginxCPU,
-			Memory: nginxMemory,
-		},
-		FPM: drupal.Exporter{
-			Image:  ctx.FPM.Image,
-			Port:   ctx.FPM.Port,
-			CPU:    fpmCPU,
-			Memory: fpmMemory,
+	metrics := drupal.Metrics{
+		FPM: drupal.MetricsFPM{
+			Name:     ctx.Metrics.FPM.Name,
+			Image:    ctx.Metrics.FPM.Image,
+			CPU:      resource.MustParse(ctx.Metrics.FPM.CPU),
+			Memory:   resource.MustParse(ctx.Metrics.FPM.Memory),
+			Protocol: ctx.Metrics.FPM.Protocol,
+			Port:     ctx.Metrics.FPM.Port,
+			Path:     ctx.Metrics.FPM.Path,
 		},
 	}
 
-	if err := drupal.Add(mgr, exporters); err != nil {
+	if err := drupal.Add(mgr, metrics); err != nil {
 		return errors.Wrap(err, "add to manager failed")
 	}
 
@@ -78,13 +70,32 @@ func Drupal(app *kingpin.CmdClause) {
 
 	cmd := app.Command("drupal", "Start the Drupal operator").Action(c.run)
 
-	cmd.Flag("nginx-exporter-image", "Image to use for exporting Nginx metrics").Envar("SKPR_EXPORTER_NGINX_IMAGE").Default("docker.io/skpr/nginx-exporter:v0.2.0").StringVar(&c.Nginx.Image)
-	cmd.Flag("nginx-exporter-port", "Port to receive requests").Envar("SKPR_EXPORTER_NGINX_PORT").Default("9113").StringVar(&c.Nginx.Port)
-	cmd.Flag("nginx-exporter-cpu", "CPU allowance for the Nginx exporter process").Envar("SKPR_EXPORTER_NGINX_CPU").Default("50m").StringVar(&c.Nginx.CPU)
-	cmd.Flag("nginx-exporter-memory", "Memory allowance for the Nginx exporter process").Envar("SKPR_EXPORTER_NGINX_MEMORY").Default("96Mi").StringVar(&c.Nginx.Memory)
-
-	cmd.Flag("fpm-exporter-image", "Image to use for exporting Nginx metrics").Envar("SKPR_EXPORTER_FPM_IMAGE").Default("docker.io/skpr/fpm-exporter:v1.0.0").StringVar(&c.FPM.Image)
-	cmd.Flag("fpm-exporter-port", "Port to receive requests").Envar("SKPR_EXPORTER_FPM_PORT").Default("9253").StringVar(&c.FPM.Port)
-	cmd.Flag("fpm-exporter-cpu", "CPU allowance for the Nginx exporter process").Envar("SKPR_EXPORTER_FPM_CPU").Default("50m").StringVar(&c.FPM.CPU)
-	cmd.Flag("fpm-exporter-memory", "Memory allowance for the Nginx exporter process").Envar("SKPR_EXPORTER_FPM_MEMORY").Default("96Mi").StringVar(&c.FPM.Memory)
+	cmd.Flag("fpm-metrics-name", "Name of the metric to use for autoscaling").
+		Envar("SKPR_FPM_METRICS_NAME").
+		Default("phpfpm_active_processes").
+		StringVar(&c.Metrics.FPM.Name)
+	cmd.Flag("fpm-metrics-image", "Image to use for exporting FPM metrics").
+		Envar("SKPR_FPM_METRICS_IMAGE").
+		Default("skpr/fpm-metrics-adapter:sidecar-v0.0.2").
+		StringVar(&c.Metrics.FPM.Image)
+	cmd.Flag("fpm-metrics-cpu", "CPU allowance for the FPM metrics process").
+		Envar("SKPR_FPM_METRICS_CPU").
+		Default("20m").
+		StringVar(&c.Metrics.FPM.CPU)
+	cmd.Flag("fpm-metrics-memory", "Memory allowance for the FPM metrics process").
+		Envar("SKPR_FPM_METRICS_MEMORY").
+		Default("32Mi").
+		StringVar(&c.Metrics.FPM.Memory)
+	cmd.Flag("fpm-metrics-protocol", "Protocol to receive requests").
+		Envar("SKPR_FPM_METRICS_PROTOCOL").
+		Default("http").
+		StringVar(&c.Metrics.FPM.Port)
+	cmd.Flag("fpm-metrics-port", "Port to receive requests").
+		Envar("SKPR_FPM_METRICS_PORT").
+		Default("80").
+		StringVar(&c.Metrics.FPM.Port)
+	cmd.Flag("fpm-metrics-path", "Path to receive requests").
+		Envar("SKPR_FPM_METRICS_PATH").
+		Default("/metrics").
+		StringVar(&c.Metrics.FPM.Port)
 }

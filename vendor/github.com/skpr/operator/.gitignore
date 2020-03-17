@@ -19,3 +19,4 @@ bin
 *.swo
 *~
 /.vscode
+.DS_Store

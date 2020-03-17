@@ -15,25 +15,29 @@ import (
 type Client struct {
 	cloudfrontiface.CloudFrontAPI
 	distributions map[string]*cloudfront.Distribution
+	tags          map[string]cloudfront.Tags
 }
 
 // New mock CloudFront client.
 func New() *Client {
 	return &Client{
 		distributions: make(map[string]*cloudfront.Distribution),
+		tags:          make(map[string]cloudfront.Tags),
 	}
 }
 
-// CreateDistribution mocks the CloudFront client method.
-func (m *Client) CreateDistribution(input *cloudfront.CreateDistributionInput) (*cloudfront.CreateDistributionOutput, error) {
+// CreateDistributionWithTags mocks the CloudFront client method.
+func (m *Client) CreateDistributionWithTags(input *cloudfront.CreateDistributionWithTagsInput) (*cloudfront.CreateDistributionWithTagsOutput, error) {
 	// Check if distribution exists.
-	if _, ok := m.distributions[*input.DistributionConfig.CallerReference]; ok {
+	if _, ok := m.distributions[*input.DistributionConfigWithTags.DistributionConfig.CallerReference]; ok {
 		return nil, awserr.New(cloudfront.ErrCodeDistributionAlreadyExists, "already exists", errors.New("distribution already exists"))
 	}
 
+	arn := aws.String(xid.New().String())
+
 	distribution := &cloudfront.Distribution{
-		ARN:                           aws.String(xid.New().String()),
-		DistributionConfig:            input.DistributionConfig,
+		ARN:                           arn,
+		DistributionConfig:            input.DistributionConfigWithTags.DistributionConfig,
 		Id:                            aws.String(xid.New().String()),
 		InProgressInvalidationBatches: aws.Int64(1),
 		DomainName:                    aws.String("xxxxxxx.cloudfront.net"),
@@ -41,9 +45,9 @@ func (m *Client) CreateDistribution(input *cloudfront.CreateDistributionInput) (
 		Status:                        aws.String("Deployed"),
 	}
 
-	m.distributions[*input.DistributionConfig.CallerReference] = distribution
+	m.distributions[*input.DistributionConfigWithTags.DistributionConfig.CallerReference] = distribution
 
-	return &cloudfront.CreateDistributionOutput{
+	return &cloudfront.CreateDistributionWithTagsOutput{
 		Distribution: distribution,
 	}, nil
 }
@@ -119,4 +123,11 @@ func (m *Client) DeleteDistribution(input *cloudfront.DeleteDistributionInput) (
 	}
 
 	return nil, awserr.New(cloudfront.ErrCodeNoSuchDistribution, "not found", errors.New("distribution not found"))
+}
+
+// TagResource mocks the CloudFront client method.
+func (m *Client) TagResource(*cloudfront.TagResourceInput) (*cloudfront.TagResourceOutput, error) {
+	resp := &cloudfront.TagResourceOutput{}
+
+	return resp, nil
 }

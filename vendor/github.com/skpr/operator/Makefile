@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 
 export CGO_ENABLED=0
+export GO111MODULE=off
 
 PROJECT=github.com/previousnext/gopher
 COMMIT=$(shell git rev-list -1 HEAD)
@@ -15,7 +16,7 @@ all: test build
 test: generate test-unit test-integration
 
 test-unit:
-	go test -tags=unit ./...
+	go test -count=1 -tags=unit ./...
 
 test-integration:
 	go test -tags=integration ./...

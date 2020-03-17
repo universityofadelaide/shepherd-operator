@@ -6,14 +6,27 @@ import (
 	"k8s.io/client-go/rest"
 
 	awsv1beta1 "github.com/skpr/operator/pkg/apis/aws/v1beta1"
+	"github.com/skpr/operator/pkg/clientset/aws/certificate"
+	"github.com/skpr/operator/pkg/clientset/aws/certificaterequest"
+	"github.com/skpr/operator/pkg/clientset/aws/cloudfront"
+	"github.com/skpr/operator/pkg/clientset/aws/cloudfrontinvalidation"
 )
 
-// ClientInterface for interacting with AWS subclients.
-type ClientInterface interface {
-	Certificates(namespace string) CertificateInterface
-	CertificateRequests(namespace string) CertificateRequestInterface
-	CloudFronts(namespace string) CloudFrontInterface
-	CloudFrontInvalidations(namespace string) CloudFrontInvalidationInterface
+const (
+	// Group which this clientset interacts with.
+	Group = "aws.skpr.io"
+	// Version which this clientset interacts with.
+	Version = "v1beta1"
+	// APIVersion which this clientset interacts with.
+	APIVersion = "aws.skpr.io/v1beta1"
+)
+
+// Interface for interacting with AWS subclients.
+type Interface interface {
+	Certificates(namespace string) certificate.Interface
+	CertificateRequests(namespace string) certificaterequest.Interface
+	CloudFronts(namespace string) cloudfront.Interface
+	CloudFrontInvalidations(namespace string) cloudfrontinvalidation.Interface
 }
 
 // Client for interacting with Operator objects.
@@ -38,32 +51,32 @@ func NewForConfig(c *rest.Config) (*Client, error) {
 }
 
 // Certificates within a namespace.
-func (c *Client) Certificates(namespace string) CertificateInterface {
-	return &certificateClient{
+func (c *Client) Certificates(namespace string) certificate.Interface {
+	return &certificate.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}
 }
 
 // CertificateRequests within a namespace.
-func (c *Client) CertificateRequests(namespace string) CertificateRequestInterface {
-	return &certificateRequestClient{
+func (c *Client) CertificateRequests(namespace string) certificaterequest.Interface {
+	return &certificaterequest.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}
 }
 
 // CloudFronts within a namespace.
-func (c *Client) CloudFronts(namespace string) CloudFrontInterface {
-	return &cloudfrontClient{
+func (c *Client) CloudFronts(namespace string) cloudfront.Interface {
+	return &cloudfront.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}
 }
 
 // CloudFrontInvalidations within a namespace.
-func (c *Client) CloudFrontInvalidations(namespace string) CloudFrontInvalidationInterface {
-	return &cloudFrontInvalidationClient{
+func (c *Client) CloudFrontInvalidations(namespace string) cloudfrontinvalidation.Interface {
+	return &cloudfrontinvalidation.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}

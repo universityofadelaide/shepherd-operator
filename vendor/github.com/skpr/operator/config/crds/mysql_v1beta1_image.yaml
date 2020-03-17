@@ -1,0 +1,143 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: images.mysql.skpr.io
+spec:
+  group: mysql.skpr.io
+  names:
+    kind: Image
+    plural: images
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            connection:
+              description: Connection details for the mysql image.
+              properties:
+                configmap:
+                  description: ConfigMap which will be used for connectivity.
+                  properties:
+                    keys:
+                      description: ConfigMap keys used for connectivity.
+                      properties:
+                        database:
+                          description: Database which was applied to the application
+                            for database connectivity.
+                          type: string
+                        hostname:
+                          description: Hostname which was applied to the application
+                            for database connectivity.
+                          type: string
+                        port:
+                          description: Port which was applied to the application for
+                            database connectivity.
+                          type: string
+                      required:
+                      - database
+                      - hostname
+                      - port
+                      type: object
+                    name:
+                      description: Name of the ConfigMap.
+                      type: string
+                  required:
+                  - name
+                  - keys
+                  type: object
+                secret:
+                  description: Secret which will be used for connectivity.
+                  properties:
+                    keys:
+                      description: Secret keys used for connectivity.
+                      properties:
+                        password:
+                          description: Password which was applied to the application
+                            for database connectivity.
+                          type: string
+                        username:
+                          description: Username which was applied to the application
+                            for database connectivity.
+                          type: string
+                      required:
+                      - username
+                      - password
+                      type: object
+                    name:
+                      description: Name of the Secret.
+                      type: string
+                  required:
+                  - name
+                  - keys
+                  type: object
+              required:
+              - configmap
+              - secret
+              type: object
+            destinations:
+              description: Destinations to push the  mysql image to.
+              items:
+                type: string
+              type: array
+            rules:
+              description: Rules for the mysql image.
+              properties:
+                ignore:
+                  items:
+                    type: string
+                  type: array
+                nodata:
+                  items:
+                    type: string
+                  type: array
+                rewrite:
+                  type: object
+              required:
+              - rewrite
+              - nodata
+              - ignore
+              type: object
+          required:
+          - connection
+          - rules
+          - destinations
+          type: object
+        status:
+          properties:
+            completionTime:
+              description: Time which the MySQL image finished building
+              format: date-time
+              type: string
+            phase:
+              description: Current state of the database image.
+              type: string
+            startTime:
+              description: Time which the MySQL image started building
+              format: date-time
+              type: string
+          type: object
+  version: v1beta1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

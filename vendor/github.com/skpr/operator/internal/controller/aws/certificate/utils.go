@@ -1,7 +1,10 @@
 package certificate
 
 import (
+	"sort"
+
 	"github.com/aws/aws-sdk-go/service/acm"
+	"github.com/maple-tech/go-hashify"
 	awsv1beta1 "github.com/skpr/operator/pkg/apis/aws/v1beta1"
 )
 
@@ -31,17 +34,18 @@ func requestToReference(request awsv1beta1.CertificateRequest) awsv1beta1.Certif
 	}
 }
 
-// Returns a list of CertificateRequests which have a common owner.
-func filterByOwner(owner *awsv1beta1.Certificate, requests []awsv1beta1.CertificateRequest) []awsv1beta1.CertificateRequest {
-	var list []awsv1beta1.CertificateRequest
+// Helper function to get a hash from the certificate request spec.
+func getHash(spec awsv1beta1.CertificateRequestSpec) (string, error) {
+	// We have to sort the alternative names otherwise a new hash will
+	// get generated when an order was changed.
+	sort.Strings(spec.AlternateNames)
 
-	for _, request := range requests {
-		for _, reference := range request.ObjectMeta.OwnerReferences {
-			if reference.UID == owner.ObjectMeta.UID {
-				list = append(list, request)
-			}
-		}
-	}
+	return hashify.SHA1String(spec)
+}
 
-	return list
+// Helper function to sort requests.
+func sortRequests(list *awsv1beta1.CertificateRequestList) {
+	sort.Slice(list.Items, func(i, j int) bool {
+		return list.Items[i].ObjectMeta.CreationTimestamp.After(list.Items[j].ObjectMeta.CreationTimestamp.Time)
+	})
 }

@@ -9,6 +9,8 @@ const (
 	AnnotationScheme = "prometheus.io/scheme"
 	// AnnotationPath tells Prometheus which path to scrape metrics.
 	AnnotationPath = "prometheus.io/path"
+	// AnnotationToken tells Prometheus which token to use when scraping.
+	AnnotationToken = "prometheus.io/token"
 )
 
 const (

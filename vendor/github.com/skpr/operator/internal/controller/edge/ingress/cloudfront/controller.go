@@ -24,10 +24,17 @@ import (
 	edgev1beta1 "github.com/skpr/operator/pkg/apis/edge/v1beta1"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
 	k8ssync "github.com/skpr/operator/pkg/utils/k8s/sync"
+	"github.com/skpr/operator/pkg/utils/prometheus"
 )
 
-// ControllerName used for identifying which controller is performing an operation.
-const ControllerName = "ingress-cloudfront-controller"
+const (
+	// ControllerName used for identifying which controller is performing an operation.
+	ControllerName = "ingress-cloudfront-controller"
+
+	// AnnotationContourTimeout is used to override the default 15s which Envoy proxy uses for a request.
+	// https://github.com/heptio/contour/blob/master/docs/annotations.md
+	AnnotationContourTimeout = "contour.heptio.com/request-timeout"
+)
 
 // Add creates a new Ingress Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -91,6 +98,7 @@ type ReconcileIngress struct {
 
 // Params which inform the Reconciler.
 type Params struct {
+	ContourTimeout string
 	OriginEndpoint string
 	OriginPolicy   string
 	OriginTimeout  int64
@@ -145,6 +153,13 @@ func (r *ReconcileIngress) Sync(log log.Logger, instance *edgev1beta1.Ingress) (
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.ObjectMeta.Name,
 			Namespace: instance.ObjectMeta.Namespace,
+			Annotations: map[string]string{
+				prometheus.AnnotationScrape: prometheus.ScrapeTrue,
+				prometheus.AnnotationScheme: prometheus.SchemeHTTPS,
+				prometheus.AnnotationPath:   instance.Spec.Prometheus.Path,
+				prometheus.AnnotationToken:  instance.Spec.Prometheus.Token,
+				AnnotationContourTimeout:    r.params.ContourTimeout,
+			},
 		},
 	}
 

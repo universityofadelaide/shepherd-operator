@@ -6,11 +6,21 @@ import (
 	"k8s.io/client-go/rest"
 
 	edgev1beta1 "github.com/skpr/operator/pkg/apis/edge/v1beta1"
+	"github.com/skpr/operator/pkg/clientset/edge/ingress"
 )
 
-// ClientInterface for interacting with AWS subclients.
-type ClientInterface interface {
-	Ingresss(namespace string) IngressInterface
+const (
+	// Group which this clientset interacts with.
+	Group = "edge.skpr.io"
+	// Version which this clientset interacts with.
+	Version = "v1beta1"
+	// APIVersion which this clientset interacts with.
+	APIVersion = "edge.skpr.io/v1beta1"
+)
+
+// Interface for interacting with AWS subclients.
+type Interface interface {
+	Ingresses(namespace string) ingress.Interface
 }
 
 // Client for interacting with Operator objects.
@@ -34,9 +44,9 @@ func NewForConfig(c *rest.Config) (*Client, error) {
 	return &Client{RestClient: client}, nil
 }
 
-// Ingresss within a namespace.
-func (c *Client) Ingresss(namespace string) IngressInterface {
-	return &ingressClient{
+// Ingresses within a namespace.
+func (c *Client) Ingresses(namespace string) ingress.Interface {
+	return &ingress.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}

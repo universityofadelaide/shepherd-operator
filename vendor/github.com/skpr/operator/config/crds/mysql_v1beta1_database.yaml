@@ -47,6 +47,9 @@ spec:
             connection:
               description: Connection details for the database.
               properties:
+                ca:
+                  description: CA used when connecting to the database.
+                  type: string
                 database:
                   description: Database used when connecting to the database.
                   type: string
@@ -71,9 +74,6 @@ spec:
             phase:
               description: Current state of the database being provisioned.
               type: string
-          required:
-          - phase
-          - connection
           type: object
   version: v1beta1
 status:

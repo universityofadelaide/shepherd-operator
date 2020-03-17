@@ -18,9 +18,9 @@ const (
 	// VolumePermissionsDefaultDeadline sets deadline if not specified.
 	VolumePermissionsDefaultDeadline = 600
 	// VolumePermissionsDefaultKeepSuccess sets KeepSuccess if not specified.
-	VolumePermissionsDefaultKeepSuccess = 2
+	VolumePermissionsDefaultKeepSuccess = 1
 	// VolumePermissionsDefaultKeepFailed sets KeepFailed if not specified.
-	VolumePermissionsDefaultKeepFailed = 2
+	VolumePermissionsDefaultKeepFailed = 1
 	// VolumePermissionsDefaultRetries sets Retries if not specified.
 	VolumePermissionsDefaultRetries = 2
 )

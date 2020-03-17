@@ -35,5 +35,8 @@ func (d *CertificateRequestCommand) run(c *kingpin.ParseContext) error {
 func CertificateRequest(app *kingpin.CmdClause) {
 	c := &CertificateRequestCommand{}
 	cmd := app.Command("certificate-request", "Start the AWS CertificateRequest operator").Action(c.run)
-	cmd.Flag("prefix", "Prefix to used for reference when creating new distributions").Envar("SKPR_OPERATOR_CERTIFICATE_REQUEST_PREFIX").Required().StringVar(&c.params.Prefix)
+	cmd.Flag("prefix", "Prefix to used for reference when creating new distributions").
+		Envar("SKPR_OPERATOR_CERTIFICATE_REQUEST_PREFIX").
+		Required().
+		StringVar(&c.params.Prefix)
 }

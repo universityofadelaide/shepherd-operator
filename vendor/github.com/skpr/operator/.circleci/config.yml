@@ -16,6 +16,7 @@ jobs:
     steps:
       - checkout
       - run: |
+          ./hack/check-expire.sh
           go get golang.org/x/lint/golint
           make lint
 

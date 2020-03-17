@@ -1,10 +1,6 @@
 package v1beta1
 
 import (
-	"crypto/md5"
-	"fmt"
-	"strings"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -14,13 +10,6 @@ type CertificateRequestSpec struct {
 	CommonName string `json:"commonName"`
 	// Additional domains for the certificate request.
 	AlternateNames []string `json:"alternateNames,omitempty"`
-}
-
-// Hash value derived from the CommonName and AlternativeNames.
-func (s CertificateRequestSpec) Hash() string {
-	domains := append(s.AlternateNames, s.CommonName)
-	val := strings.Join(domains, "")
-	return fmt.Sprintf("%x", md5.Sum([]byte(val)))
 }
 
 // CertificateRequestStatus defines the observed state of CertificateRequest
@@ -43,6 +32,8 @@ type ValidateRecord struct {
 	Name string `json:"name,omitempty"`
 	// The type of DNS validation record.
 	Type string `json:"type,omitempty"`
+	// The status of the DNS validation record.
+	Status string `json:"status,omitempty"`
 	// The value of DNS validation record.
 	Value string `json:"value,omitempty"`
 }

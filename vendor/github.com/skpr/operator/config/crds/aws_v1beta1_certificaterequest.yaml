@@ -65,6 +65,9 @@ spec:
                   name:
                     description: The name of DNS validation record.
                     type: string
+                  status:
+                    description: The status of the DNS validation record.
+                    type: string
                   type:
                     description: The type of DNS validation record.
                     type: string

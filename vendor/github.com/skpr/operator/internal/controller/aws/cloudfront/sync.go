@@ -14,23 +14,39 @@ import (
 
 	awsv1beta1 "github.com/skpr/operator/pkg/apis/aws/v1beta1"
 	"github.com/skpr/operator/pkg/utils/k8s/events"
+	sliceutils "github.com/skpr/operator/pkg/utils/slice"
 )
 
 // SyncExternal CloudFront distribution.
 func (r *ReconcileCloudFront) SyncExternal(log log.Logger, instance *awsv1beta1.CloudFront) (*cloudfront.Distribution, error) {
-	config, err := generateDistribution(r.prefix, instance)
+	config, tags, err := generateDistributionWithTags(r.params, instance)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate distribution config")
 	}
 
 	if instance.Status.ID != "" {
 		log.Info("ID found on object status field. Updating existing distribution.")
-		return r.UpdateDistribution(instance, config)
+
+		distribution, err := r.UpdateDistribution(instance, config)
+		if err != nil {
+			return distribution, err
+		}
+
+		// Update the tags.
+		_, err = r.cloudfront.TagResource(&cloudfront.TagResourceInput{
+			Resource: distribution.ARN,
+			Tags:     tags,
+		})
+
+		return distribution, err
 	}
 
 	// The distribution does not exist, we should create it.
-	resp, err := r.cloudfront.CreateDistribution(&cloudfront.CreateDistributionInput{
-		DistributionConfig: config,
+	resp, err := r.cloudfront.CreateDistributionWithTags(&cloudfront.CreateDistributionWithTagsInput{
+		DistributionConfigWithTags: &cloudfront.DistributionConfigWithTags{
+			DistributionConfig: config,
+			Tags:               tags,
+		},
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
@@ -62,6 +78,14 @@ func (r *ReconcileCloudFront) UpdateDistribution(instance *awsv1beta1.CloudFront
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get distribution config")
+	}
+
+	// CloudFront doesn't order it's aliases well.
+	// Our aliases are ordered by user written yaml.
+	// These approaches clash and result in a "diff" and CloudFront constantly being "InProgress".
+	// If they have the same values, defer to the existing alias list and order.
+	if sliceutils.Equal(aws.StringValueSlice(respGet.DistributionConfig.Aliases.Items), aws.StringValueSlice(config.Aliases.Items)) {
+		config.Aliases = respGet.DistributionConfig.Aliases
 	}
 
 	// Compare it to what we have. Update if nessecary.

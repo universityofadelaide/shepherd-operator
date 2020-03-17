@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/acm/acmiface"
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
+	"github.com/skpr/operator/pkg/utils/uid"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +25,6 @@ import (
 
 	awsv1beta1 "github.com/skpr/operator/pkg/apis/aws/v1beta1"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
-	"github.com/skpr/operator/pkg/utils/hash"
 	"github.com/skpr/operator/pkg/utils/k8s/events"
 	"github.com/skpr/operator/pkg/utils/slice"
 )
@@ -171,8 +171,13 @@ func (r *ReconcileCertificateRequest) CreateCertificate(certificate *awsv1beta1.
 
 	r.recorder.Eventf(certificate, corev1.EventTypeNormal, events.EventCreate, "Requesting certificate")
 
+	token, err := uid.GetToken(certificate.ObjectMeta.UID)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get token")
+	}
+
 	input := &acm.RequestCertificateInput{
-		IdempotencyToken: aws.String(hash.String(string(certificate.ObjectMeta.UID))),
+		IdempotencyToken: aws.String(token),
 		DomainName:       aws.String(certificate.Spec.CommonName),
 		ValidationMethod: aws.String(acm.ValidationMethodDns),
 	}
@@ -212,9 +217,10 @@ func (r *ReconcileCertificateRequest) DescribeCertificate(arn string) (awsv1beta
 
 	for _, val := range resp.Certificate.DomainValidationOptions {
 		status.Validate = append(status.Validate, awsv1beta1.ValidateRecord{
-			Name:  *val.ResourceRecord.Name,
-			Type:  *val.ResourceRecord.Type,
-			Value: *val.ResourceRecord.Value,
+			Name:   *val.ResourceRecord.Name,
+			Type:   *val.ResourceRecord.Type,
+			Status: *val.ValidationStatus,
+			Value:  *val.ResourceRecord.Value,
 		})
 	}
 
@@ -224,6 +230,10 @@ func (r *ReconcileCertificateRequest) DescribeCertificate(arn string) (awsv1beta
 // DeleteCertificate as part of cleanup.
 func (r *ReconcileCertificateRequest) DeleteCertificate(certificate *awsv1beta1.CertificateRequest) error {
 	r.recorder.Eventf(certificate, corev1.EventTypeNormal, events.EventDelete, "Deleting certificate")
+
+	if certificate.Status.ARN == "" {
+		return nil
+	}
 
 	_, err := r.acm.DeleteCertificate(&acm.DeleteCertificateInput{
 		CertificateArn: aws.String(certificate.Status.ARN),

@@ -3,6 +3,7 @@ package drupal
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/log"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,15 +29,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/skpr/operator/pkg/annotation"
 	appv1beta1 "github.com/skpr/operator/pkg/apis/app/v1beta1"
 	extensionsv1beta1 "github.com/skpr/operator/pkg/apis/extensions/v1beta1"
 	mysqlv1beta1 "github.com/skpr/operator/pkg/apis/mysql/v1beta1"
+	searchv1beta1 "github.com/skpr/operator/pkg/apis/search/v1beta1"
 	"github.com/skpr/operator/pkg/mysql"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
 	deploymentutils "github.com/skpr/operator/pkg/utils/k8s/deployment"
 	"github.com/skpr/operator/pkg/utils/k8s/generate"
 	k8ssync "github.com/skpr/operator/pkg/utils/k8s/sync"
-	"github.com/skpr/operator/pkg/utils/prometheus"
 )
 
 const (
@@ -71,7 +73,7 @@ const (
 
 const (
 	// PodEnvSkipperEnv identifies which environment an application is running.
-	PodEnvSkipperEnv = "SKIPPER_ENV"
+	PodEnvSkipperEnv = "SKPR_ENV"
 	// PodEnvNewRelicApp is a required environment variable for New Relic monitoring.
 	PodEnvNewRelicApp = "NEW_RELIC_APP_NAME"
 	// PodEnvNewRelicLicense is a required environment variable for New Relic monitoring.
@@ -87,8 +89,8 @@ const (
 	PodContainerFPM = "fpm"
 	// PodContainerCLI for identifying the CLI container in a pod.
 	PodContainerCLI = "cli"
-	// PodContainerExporter for identifying the Exporter container in a pod.
-	PodContainerExporter = "exporter"
+	// PodContainerMetrics for identifying the Metrics container in a pod.
+	PodContainerMetrics = "metrics"
 )
 
 const (
@@ -102,10 +104,14 @@ const (
 	VolumeConfigDefault = "config-default"
 	// VolumeConfigOverride identifier.
 	VolumeConfigOverride = "config-override"
+	// VolumeConfigData identifier.
+	VolumeConfigData = "config-data"
 	// VolumeSecretDefault identifier.
 	VolumeSecretDefault = "secret-default"
 	// VolumeSecretOverride identifier.
 	VolumeSecretOverride = "secret-override"
+	// VolumeSecretCertificate identifier.
+	VolumeSecretCertificate = "secret-certificate"
 )
 
 const (
@@ -118,23 +124,43 @@ const (
 )
 
 const (
+	// ConfigMapDataConfigJSON declares the key to the application config file.
+	ConfigMapDataConfigJSON = "config.json"
+)
+
+const (
 	// SecretPrometheusToken identifier for applications.
 	SecretPrometheusToken = "prometheus.token"
 )
 
+const (
+	// PHPMemoryLimit configures PHPs memory limit.
+	PHPMemoryLimit = "PHP_MEMORY_LIMIT"
+	// FPMMaxChildren configures PHP FPM max children.
+	FPMMaxChildren = "PHP_FPM_MAX_CHILDREN"
+	// FPMMinSpareServers configures PHP FPM min spare servers.
+	FPMMinSpareServers = "PHP_FPM_MIN_SPARE_SERVERS"
+	// FPMMaxSpareServers configures PHP FPM max spare servers.
+	FPMMaxSpareServers = "PHP_FPM_MAX_SPARE_SERVERS"
+	// FPMStartServers configures PHP FPM start servers.
+	FPMStartServers = "PHP_FPM_START_SERVERS"
+	// FPMMaxRequests configures PHP FPM max requests.
+	FPMMaxRequests = "PHP_FPM_MAX_REQUESTS"
+)
+
 // Add creates a new Drupal Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, exporters Exporters) error {
-	return add(mgr, newReconciler(mgr, exporters))
+func Add(mgr manager.Manager, metrics Metrics) error {
+	return add(mgr, newReconciler(mgr, metrics))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, exporters Exporters) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, metrics Metrics) reconcile.Reconciler {
 	return &ReconcileDrupal{
-		Client:    mgr.GetClient(),
-		recorder:  mgr.GetRecorder(ControllerName),
-		scheme:    mgr.GetScheme(),
-		exporters: exporters,
+		Client:   mgr.GetClient(),
+		recorder: mgr.GetRecorder(ControllerName),
+		scheme:   mgr.GetScheme(),
+		metrics:  metrics,
 	}
 }
 
@@ -155,6 +181,24 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	// Watch Secret changes.
+	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &appv1beta1.Drupal{},
+	})
+	if err != nil {
+		return err
+	}
+
+	// Watch ConfigMap changes.
+	err = c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &appv1beta1.Drupal{},
+	})
+	if err != nil {
+		return err
+	}
+
 	// Watch Drupal changes.
 	return c.Watch(&source.Kind{Type: &appv1beta1.Drupal{}}, &handler.EnqueueRequestForObject{})
 }
@@ -164,23 +208,25 @@ var _ reconcile.Reconciler = &ReconcileDrupal{}
 // ReconcileDrupal reconciles a Drupal object
 type ReconcileDrupal struct {
 	client.Client
-	recorder  record.EventRecorder
-	scheme    *runtime.Scheme
-	exporters Exporters
+	recorder record.EventRecorder
+	scheme   *runtime.Scheme
+	metrics  Metrics
 }
 
-// Exporters which are used for Drupal metrics.
-type Exporters struct {
-	Nginx Exporter
-	FPM   Exporter
+// Metrics used for autoscaling.
+type Metrics struct {
+	FPM MetricsFPM
 }
 
-// Exporter which is used for Drupal metrics.
-type Exporter struct {
-	Image  string
-	Port   string
-	CPU    resource.Quantity
-	Memory resource.Quantity
+// MetricsFPM used for autoscaling PHP FPM.
+type MetricsFPM struct {
+	Name     string
+	Image    string
+	CPU      resource.Quantity
+	Memory   resource.Quantity
+	Protocol string
+	Port     string
+	Path     string
 }
 
 // Reconcile reads that state of the cluster for a Drupal object and makes changes based on the state read
@@ -235,11 +281,26 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		LabelAppType: Application,
 	}
 
+	configMapData := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-data", name),
+			Namespace: drupal.ObjectMeta.Namespace,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
+		},
+		BinaryData: make(map[string][]byte),
+	}
+
 	configMapDefault := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-default", name),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Data: map[string]string{
 			ConfigMapMountPublic:    drupal.Spec.Volume.Public.Path,
@@ -252,7 +313,22 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-default", name),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
+		},
+		Data: make(map[string][]byte),
+	}
+
+	secretCertificate := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-certificate", name),
+			Namespace: drupal.ObjectMeta.Namespace,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Data: make(map[string][]byte),
 	}
@@ -265,7 +341,10 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", name, VolumePublic),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -284,7 +363,10 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", name, VolumePrivate),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -303,7 +385,10 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", name, VolumeTemporary),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -409,7 +494,10 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-override", name),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Data: make(map[string]string),
 	}
@@ -418,12 +506,15 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-override", name),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		},
 		Data: make(map[string][]byte),
 	}
 
-	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, configMapOverride, k8ssync.ConfigMap(drupal, configMapOverride.Data, false, r.scheme))
+	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, configMapOverride, k8ssync.ConfigMap(drupal, configMapOverride.Data, configMapOverride.BinaryData, false, r.scheme))
 	if err != nil {
 		return status, errors.Wrap(err, "failed to sync ConfigMap")
 	}
@@ -436,13 +527,15 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	log.Infof("Synced Secret %s with status: %s", secretOverride.ObjectMeta.Name, result)
 
 	mysqlStatus := make(map[string]appv1beta1.DrupalStatusMySQL)
-	mysqlBackup := make(map[string]extensionsv1beta1.BackupSpecMySQL)
 
 	for mysqlKey, mysqlValue := range drupal.Spec.MySQL {
 		mysqlMetadata := metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", name, mysqlKey),
 			Namespace: drupal.ObjectMeta.Namespace,
-			Labels:    commonlabels,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
+			},
+			Labels: commonlabels,
 		}
 
 		database := &mysqlv1beta1.Database{
@@ -467,6 +560,7 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 			mysqlKeyDatabase = fmt.Sprintf("mysql.%s.database", mysqlKey)
 			mysqlKeyUsername = fmt.Sprintf("mysql.%s.username", mysqlKey)
 			mysqlKeyPassword = fmt.Sprintf("mysql.%s.password", mysqlKey)
+			mysqlKeyCA       = fmt.Sprintf("mysql.%s.ca.crt", mysqlKey)
 		)
 
 		if database.Status.Connection.Hostname != "" {
@@ -477,6 +571,13 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		}
 		if database.Status.Connection.Database != "" {
 			configMapDefault.Data[mysqlKeyDatabase] = database.Status.Connection.Database
+		}
+		if database.Status.Connection.CA != "" {
+			// This is used to discover the location of the CA certificate.
+			configMapDefault.Data[mysqlKeyCA] = filepath.Join(drupal.Spec.Secret.Certificate.Path, mysqlKeyCA)
+
+			// This is the file which will be loaded.
+			secretCertificate.Data[mysqlKeyCA] = []byte(database.Status.Connection.CA)
 		}
 
 		if database.Status.Connection.Username != "" {
@@ -503,21 +604,58 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 				},
 			},
 		}
+	}
 
-		mysqlBackup[mysqlKey] = extensionsv1beta1.BackupSpecMySQL{
-			ConfigMap: extensionsv1beta1.BackupSpecMySQLConfigMap{
-				Name: configMapDefault.ObjectMeta.Name,
-				Keys: extensionsv1beta1.BackupSpecMySQLConfigMapKeys{
-					Hostname: mysqlKeyHostname,
-					Port:     mysqlKeyPort,
-					Database: mysqlKeyDatabase,
-				},
+	solrStatus := make(map[string]appv1beta1.DrupalStatusSolr)
+
+	for solrKey, solrValue := range drupal.Spec.Solr {
+		mysqlMetadata := metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s", name, solrKey),
+			Namespace: drupal.ObjectMeta.Namespace,
+			Annotations: map[string]string{
+				annotation.Name: drupal.ObjectMeta.Name,
 			},
-			Secret: extensionsv1beta1.BackupSpecMySQLSecret{
-				Name: secretDefault.ObjectMeta.Name,
-				Keys: extensionsv1beta1.BackupSpecMySQLSecretKeys{
-					Username: mysqlKeyUsername,
-					Password: mysqlKeyPassword,
+			Labels: commonlabels,
+		}
+
+		solr := &searchv1beta1.Solr{
+			ObjectMeta: mysqlMetadata,
+			Spec: searchv1beta1.SolrSpec{
+				Core:      solrKey,
+				Version:   solrValue.Version,
+				Resources: solrValue.Resources,
+			},
+		}
+
+		result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, solr, k8ssync.Solr(drupal, solr.Spec, r.scheme))
+		if err != nil {
+			return status, errors.Wrap(err, "failed to sync Solr")
+		}
+		log.Infof("Synced Solr %s with status: %s", solr.ObjectMeta.Name, result)
+
+		var (
+			solrKeyHost = fmt.Sprintf("solr.%s.host", solrKey)
+			solrKeyPort = fmt.Sprintf("solr.%s.port", solrKey)
+			solrKeyCore = fmt.Sprintf("solr.%s.core", solrKey)
+		)
+
+		if solr.Status.Host != "" {
+			configMapDefault.Data[solrKeyHost] = solr.Status.Host
+		}
+		if solr.Status.Port != 0 {
+			configMapDefault.Data[solrKeyPort] = strconv.Itoa(solr.Status.Port)
+		}
+		if solr.Status.Core != "" {
+			configMapDefault.Data[solrKeyCore] = solr.Status.Core
+		}
+
+		solrStatus[solrKey] = appv1beta1.DrupalStatusSolr{
+			ConfigMap: appv1beta1.DrupalStatusSolrConfigMap{
+				Name: configMapDefault.ObjectMeta.Name,
+				Keys: appv1beta1.DrupalStatusSolrConfigMapKeys{
+					Host: solrKeyHost,
+					Port: solrKeyPort,
+					Core: solrKeyCore,
 				},
 			},
 		}
@@ -526,6 +664,9 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	fpmMetadata := metav1.ObjectMeta{
 		Name:      fmt.Sprintf("%s-%s", name, LayerFPM),
 		Namespace: drupal.ObjectMeta.Namespace,
+		Annotations: map[string]string{
+			annotation.Name: drupal.ObjectMeta.Name,
+		},
 		Labels: map[string]string{
 			LabelAppName:  drupal.ObjectMeta.Name,
 			LabelAppType:  Application,
@@ -546,11 +687,11 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: fpmMetadata.Labels,
 					Annotations: map[string]string{
-						prometheus.AnnotationScrape: prometheus.ScrapeTrue,
-						prometheus.AnnotationPort:   r.exporters.FPM.Port,
+						annotation.Name:         drupal.ObjectMeta.Name,
+						annotation.ContainerApp: PodContainerFPM,
 					},
+					Labels: fpmMetadata.Labels,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -572,34 +713,45 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 							Resources: drupal.Spec.FPM.Resources,
 							Env: []corev1.EnvVar{
 								generate.EnvVar(PodEnvSkipperEnv, drupal.ObjectMeta.Name),
+								generate.EnvVar(PHPMemoryLimit, fmt.Sprintf("%dM", drupal.Spec.FPM.Configuration.MemoryLimit)),
+								generate.EnvVar(FPMMaxChildren, fmt.Sprint(drupal.Spec.FPM.Configuration.MaxChildren)),
+								generate.EnvVar(FPMMaxRequests, fmt.Sprint(drupal.Spec.FPM.Configuration.MaxRequests)),
+								generate.EnvVar(FPMMinSpareServers, fmt.Sprint(drupal.Spec.FPM.Configuration.MinSpareServers)),
+								generate.EnvVar(FPMMaxSpareServers, fmt.Sprint(drupal.Spec.FPM.Configuration.MaxSpareServers)),
+								generate.EnvVar(FPMStartServers, fmt.Sprint(drupal.Spec.FPM.Configuration.StartServers)),
 								generate.EnvVarConfigMap(PodEnvNewRelicApp, drupal.Spec.NewRelic.ConfigMap.Name, configMapOverride, true),
 								generate.EnvVarSecret(PodEnvNewRelicLicense, drupal.Spec.NewRelic.Secret.License, secretOverride, true),
 								generate.EnvVarConfigMap(PodEnvNewRelicEnabled, drupal.Spec.NewRelic.ConfigMap.Enabled, configMapOverride, true),
 							},
 							VolumeMounts: []corev1.VolumeMount{
+								generate.Mount(VolumeConfigData, drupal.Spec.ConfigMap.Data.Path, true),
+								generate.Mount(VolumeSecretCertificate, drupal.Spec.Secret.Certificate.Path, true),
+								generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
+								generate.Mount(VolumeTemporary, drupal.Spec.Volume.Temporary.Path, false),
+								generate.Mount(VolumePrivate, drupal.Spec.Volume.Private.Path, false),
+
+								// @expire Feb 2020
+								// Deprecated: These will be removed in a future release.
 								generate.Mount(VolumeConfigDefault, drupal.Spec.ConfigMap.Default.Path, true),
 								generate.Mount(VolumeConfigOverride, drupal.Spec.ConfigMap.Override.Path, true),
 								generate.Mount(VolumeSecretDefault, drupal.Spec.Secret.Default.Path, true),
 								generate.Mount(VolumeSecretOverride, drupal.Spec.Secret.Override.Path, true),
-								generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
-								generate.Mount(VolumeTemporary, drupal.Spec.Volume.Temporary.Path, false),
-								generate.Mount(VolumePrivate, drupal.Spec.Volume.Private.Path, false),
 							},
 							TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 						},
 						{
-							Name:            PodContainerExporter,
-							Image:           r.exporters.FPM.Image,
+							Name:            PodContainerMetrics,
+							Image:           r.metrics.FPM.Image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    r.exporters.FPM.CPU,
-									corev1.ResourceMemory: r.exporters.FPM.Memory,
+									corev1.ResourceCPU:    r.metrics.FPM.CPU,
+									corev1.ResourceMemory: r.metrics.FPM.Memory,
 								},
 								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    r.exporters.FPM.CPU,
-									corev1.ResourceMemory: r.exporters.FPM.Memory,
+									corev1.ResourceCPU:    r.metrics.FPM.CPU,
+									corev1.ResourceMemory: r.metrics.FPM.Memory,
 								},
 							},
 							TerminationMessagePath:   corev1.TerminationMessagePathDefault,
@@ -607,13 +759,18 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 						},
 					},
 					Volumes: []corev1.Volume{
+						generate.VolumeConfigMap(VolumeConfigData, configMapData.ObjectMeta.Name),
+						generate.VolumeSecret(VolumeSecretCertificate, secretCertificate.ObjectMeta.Name),
+						generate.VolumeClaim(VolumePublic, pvcPublic.ObjectMeta.Name),
+						generate.VolumeClaim(VolumeTemporary, pvcTemporary.ObjectMeta.Name),
+						generate.VolumeClaim(VolumePrivate, pvcPrivate.ObjectMeta.Name),
+
+						// @expire Feb 2020
+						// Deprecated: These will be removed in a future release.
 						generate.VolumeConfigMap(VolumeConfigDefault, configMapDefault.ObjectMeta.Name),
 						generate.VolumeConfigMap(VolumeConfigOverride, configMapOverride.ObjectMeta.Name),
 						generate.VolumeSecret(VolumeSecretDefault, secretDefault.ObjectMeta.Name),
 						generate.VolumeSecret(VolumeSecretOverride, secretOverride.ObjectMeta.Name),
-						generate.VolumeClaim(VolumePublic, pvcPublic.ObjectMeta.Name),
-						generate.VolumeClaim(VolumeTemporary, pvcTemporary.ObjectMeta.Name),
-						generate.VolumeClaim(VolumePrivate, pvcPrivate.ObjectMeta.Name),
 					},
 					// The below are fields which need to be set so we can perform an "deep equal"
 					// without always having difference.
@@ -622,6 +779,21 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 					DNSPolicy:                     corev1.DNSClusterFirst,
 					TerminationGracePeriodSeconds: &fpmDeploymentGrace,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
+					Affinity: &corev1.Affinity{
+						PodAntiAffinity: &corev1.PodAntiAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+								{
+									Weight: 100,
+									PodAffinityTerm: corev1.PodAffinityTerm{
+										LabelSelector: &metav1.LabelSelector{
+											MatchLabels: fpmMetadata.Labels,
+										},
+										TopologyKey: "kubernetes.io/hostname",
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -633,17 +805,50 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	}
 	log.Infof("Synced Deployment %s with status: %s", fpmDeployment.ObjectMeta.Name, result)
 
-	fpmHPA := &autoscalingv1.HorizontalPodAutoscaler{
+	fpmHPA := &autoscalingv2beta2.HorizontalPodAutoscaler{
 		ObjectMeta: fpmMetadata,
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+		Spec: autoscalingv2beta2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2beta2.CrossVersionObjectReference{
 				APIVersion: appsv1.SchemeGroupVersion.String(),
 				Kind:       "Deployment", // @todo, Find a const.
 				Name:       fpmDeployment.ObjectMeta.Name,
 			},
-			MinReplicas:                    &drupal.Spec.FPM.Autoscaling.Replicas.Min,
-			MaxReplicas:                    drupal.Spec.FPM.Autoscaling.Replicas.Max,
-			TargetCPUUtilizationPercentage: &drupal.Spec.FPM.Autoscaling.Trigger.CPU,
+			MinReplicas: &drupal.Spec.FPM.Autoscaling.Replicas.Min,
+			MaxReplicas: drupal.Spec.FPM.Autoscaling.Replicas.Max,
+			Metrics: []autoscalingv2beta2.MetricSpec{
+				{
+					Type: autoscalingv2beta2.ResourceMetricSourceType,
+					Resource: &autoscalingv2beta2.ResourceMetricSource{
+						Name: corev1.ResourceCPU,
+						Target: autoscalingv2beta2.MetricTarget{
+							Type:               autoscalingv2beta2.UtilizationMetricType,
+							AverageUtilization: &drupal.Spec.FPM.Autoscaling.Trigger.CPU,
+						},
+					},
+				},
+				{
+					Type: autoscalingv2beta2.ResourceMetricSourceType,
+					Resource: &autoscalingv2beta2.ResourceMetricSource{
+						Name: corev1.ResourceMemory,
+						Target: autoscalingv2beta2.MetricTarget{
+							Type:               autoscalingv2beta2.UtilizationMetricType,
+							AverageUtilization: &drupal.Spec.FPM.Autoscaling.Trigger.Memory,
+						},
+					},
+				},
+				{
+					Type: autoscalingv2beta2.PodsMetricSourceType,
+					Pods: &autoscalingv2beta2.PodsMetricSource{
+						Metric: autoscalingv2beta2.MetricIdentifier{
+							Name: r.metrics.FPM.Name,
+						},
+						Target: autoscalingv2beta2.MetricTarget{
+							Type:         autoscalingv2beta2.AverageValueMetricType,
+							AverageValue: resource.NewQuantity(drupal.Spec.FPM.Autoscaling.Trigger.Servers, resource.DecimalExponent),
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -680,6 +885,9 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	nginxMetadata := metav1.ObjectMeta{
 		Name:      fmt.Sprintf("%s-%s", name, LayerNginx),
 		Namespace: drupal.ObjectMeta.Namespace,
+		Annotations: map[string]string{
+			annotation.Name: drupal.ObjectMeta.Name,
+		},
 		Labels: map[string]string{
 			LabelAppName:  drupal.ObjectMeta.Name,
 			LabelAppType:  Application,
@@ -698,11 +906,11 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: nginxMetadata.Labels,
 					Annotations: map[string]string{
-						prometheus.AnnotationScrape: prometheus.ScrapeTrue,
-						prometheus.AnnotationPort:   r.exporters.Nginx.Port,
+						annotation.Name:         drupal.ObjectMeta.Name,
+						annotation.ContainerApp: PodContainerNginx,
 					},
+					Labels: nginxMetadata.Labels,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -710,6 +918,7 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 							Name:            PodContainerNginx,
 							Image:           drupal.Spec.Nginx.Image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
+							Resources:       drupal.Spec.Nginx.Resources,
 							SecurityContext: &corev1.SecurityContext{
 								ReadOnlyRootFilesystem: &drupal.Spec.Nginx.ReadOnly,
 							},
@@ -721,23 +930,6 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
-							},
-							TerminationMessagePath:   corev1.TerminationMessagePathDefault,
-							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-						},
-						{
-							Name:            PodContainerExporter,
-							Image:           r.exporters.Nginx.Image,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    r.exporters.Nginx.CPU,
-									corev1.ResourceMemory: r.exporters.Nginx.Memory,
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    r.exporters.Nginx.CPU,
-									corev1.ResourceMemory: r.exporters.Nginx.Memory,
-								},
 							},
 							TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
@@ -761,9 +953,30 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 					DNSPolicy:                     corev1.DNSClusterFirst,
 					TerminationGracePeriodSeconds: &nginxeploymentGrace,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
+					Affinity: &corev1.Affinity{
+						PodAntiAffinity: &corev1.PodAntiAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+								{
+									Weight: 100,
+									PodAffinityTerm: corev1.PodAffinityTerm{
+										LabelSelector: &metav1.LabelSelector{
+											MatchLabels: nginxMetadata.Labels,
+										},
+										// @todo, Should be a const.
+										TopologyKey: "kubernetes.io/hostname",
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
+	}
+
+	err = applyStrategy(nginxDeployment)
+	if err != nil {
+		return status, errors.Wrap(err, "failed update Deployment rolling update strategy")
 	}
 
 	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, nginxDeployment, k8ssync.Deployment(drupal, nginxDeployment.Spec, r.scheme))
@@ -772,17 +985,38 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	}
 	log.Infof("Synced Deployment %s with status: %s", nginxDeployment.ObjectMeta.Name, result)
 
-	nginxHPA := &autoscalingv1.HorizontalPodAutoscaler{
+	nginxHPA := &autoscalingv2beta2.HorizontalPodAutoscaler{
 		ObjectMeta: nginxMetadata,
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+		Spec: autoscalingv2beta2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2beta2.CrossVersionObjectReference{
 				APIVersion: appsv1.SchemeGroupVersion.String(),
 				Kind:       "Deployment", // @todo, Find a const.
 				Name:       nginxDeployment.ObjectMeta.Name,
 			},
-			MinReplicas:                    &drupal.Spec.Nginx.Autoscaling.Replicas.Min,
-			MaxReplicas:                    drupal.Spec.Nginx.Autoscaling.Replicas.Max,
-			TargetCPUUtilizationPercentage: &drupal.Spec.Nginx.Autoscaling.Trigger.CPU,
+			MinReplicas: &drupal.Spec.Nginx.Autoscaling.Replicas.Min,
+			MaxReplicas: drupal.Spec.Nginx.Autoscaling.Replicas.Max,
+			Metrics: []autoscalingv2beta2.MetricSpec{
+				{
+					Type: autoscalingv2beta2.ResourceMetricSourceType,
+					Resource: &autoscalingv2beta2.ResourceMetricSource{
+						Name: corev1.ResourceCPU,
+						Target: autoscalingv2beta2.MetricTarget{
+							Type:               autoscalingv2beta2.UtilizationMetricType,
+							AverageUtilization: &drupal.Spec.Nginx.Autoscaling.Trigger.CPU,
+						},
+					},
+				},
+				{
+					Type: autoscalingv2beta2.ResourceMetricSourceType,
+					Resource: &autoscalingv2beta2.ResourceMetricSource{
+						Name: corev1.ResourceMemory,
+						Target: autoscalingv2beta2.MetricTarget{
+							Type:               autoscalingv2beta2.UtilizationMetricType,
+							AverageUtilization: &drupal.Spec.Nginx.Autoscaling.Trigger.Memory,
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -831,7 +1065,11 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("%s-%s", name, cronKey),
 				Namespace: drupal.ObjectMeta.Namespace,
-				Labels:    cronLabels,
+				Annotations: map[string]string{
+					annotation.Name:         cronKey,
+					annotation.ContainerApp: PodContainerCLI,
+				},
+				Labels: cronLabels,
 			},
 			Spec: batchv1beta1.CronJobSpec{
 				Schedule:                   cronValue.Schedule,
@@ -853,7 +1091,7 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Name:            PodContainerFPM,
+										Name:            PodContainerCLI,
 										Image:           cronValue.Image,
 										ImagePullPolicy: corev1.PullIfNotPresent,
 										SecurityContext: &corev1.SecurityContext{
@@ -870,31 +1108,42 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 										Resources: cronValue.Resources,
 										Env: []corev1.EnvVar{
 											generate.EnvVar(PodEnvSkipperEnv, drupal.ObjectMeta.Name),
+											generate.EnvVar(PHPMemoryLimit, fmt.Sprintf("%dM", cronValue.Configuration.MemoryLimit)),
 											generate.EnvVarConfigMap(PodEnvNewRelicApp, drupal.Spec.NewRelic.ConfigMap.Name, configMapOverride, true),
 											generate.EnvVarSecret(PodEnvNewRelicLicense, drupal.Spec.NewRelic.Secret.License, secretOverride, true),
 											generate.EnvVarConfigMap(PodEnvNewRelicEnabled, drupal.Spec.NewRelic.ConfigMap.Enabled, configMapOverride, true),
 										},
 										VolumeMounts: []corev1.VolumeMount{
+											generate.Mount(VolumeConfigData, drupal.Spec.ConfigMap.Data.Path, true),
+											generate.Mount(VolumeSecretCertificate, drupal.Spec.Secret.Certificate.Path, true),
+											generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
+											generate.Mount(VolumeTemporary, drupal.Spec.Volume.Temporary.Path, false),
+											generate.Mount(VolumePrivate, drupal.Spec.Volume.Private.Path, false),
+
+											// @expire Feb 2020
+											// Deprecated: These will be removed in a future release.
 											generate.Mount(VolumeConfigDefault, drupal.Spec.ConfigMap.Default.Path, true),
 											generate.Mount(VolumeConfigOverride, drupal.Spec.ConfigMap.Override.Path, true),
 											generate.Mount(VolumeSecretDefault, drupal.Spec.Secret.Default.Path, true),
 											generate.Mount(VolumeSecretOverride, drupal.Spec.Secret.Override.Path, true),
-											generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
-											generate.Mount(VolumeTemporary, drupal.Spec.Volume.Temporary.Path, false),
-											generate.Mount(VolumePrivate, drupal.Spec.Volume.Private.Path, false),
 										},
 										TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 										TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 									},
 								},
 								Volumes: []corev1.Volume{
+									generate.VolumeConfigMap(VolumeConfigData, configMapData.ObjectMeta.Name),
+									generate.VolumeSecret(VolumeSecretCertificate, secretCertificate.ObjectMeta.Name),
+									generate.VolumeClaim(VolumePublic, pvcPublic.ObjectMeta.Name),
+									generate.VolumeClaim(VolumeTemporary, pvcTemporary.ObjectMeta.Name),
+									generate.VolumeClaim(VolumePrivate, pvcPrivate.ObjectMeta.Name),
+
+									// @expire Feb 2020
+									// Deprecated: These will be removed in a future release.
 									generate.VolumeConfigMap(VolumeConfigDefault, configMapDefault.ObjectMeta.Name),
 									generate.VolumeConfigMap(VolumeConfigOverride, configMapOverride.ObjectMeta.Name),
 									generate.VolumeSecret(VolumeSecretDefault, secretDefault.ObjectMeta.Name),
 									generate.VolumeSecret(VolumeSecretOverride, secretOverride.ObjectMeta.Name),
-									generate.VolumeClaim(VolumePublic, pvcPublic.ObjectMeta.Name),
-									generate.VolumeClaim(VolumeTemporary, pvcTemporary.ObjectMeta.Name),
-									generate.VolumeClaim(VolumePrivate, pvcPrivate.ObjectMeta.Name),
 								},
 								// The below are fields which need to be set so we can perform an "deep equal"
 								// without always having difference.
@@ -908,6 +1157,11 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 					},
 				},
 			},
+		}
+
+		err = applyStrategy(fpmDeployment)
+		if err != nil {
+			return status, errors.Wrap(err, "failed update Deployment rolling update strategy")
 		}
 
 		result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, cronjob, k8ssync.CronJob(drupal, cronjob.Spec, r.scheme))
@@ -944,26 +1198,30 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	log.Infof("Synced SMTP %s with status: %s", smtp.ObjectMeta.Name, result)
 
 	if drupal.Spec.SMTP.From.Address != "" {
-		configMapDefault.Data["smtp.from.address"] = drupal.Spec.SMTP.From.Address
+		configMapDefault.Data[extensionsv1beta1.ConfigMapKeyFromAddress] = drupal.Spec.SMTP.From.Address
 	}
 
 	if smtp.Status.Connection.Hostname != "" {
-		configMapDefault.Data["smtp.hostname"] = smtp.Status.Connection.Hostname
+		configMapDefault.Data[extensionsv1beta1.ConfigMapKeyHostname] = smtp.Status.Connection.Hostname
 	}
 
 	if smtp.Status.Connection.Port != 0 {
-		configMapDefault.Data["smtp.port"] = strconv.Itoa(smtp.Status.Connection.Port)
+		configMapDefault.Data[extensionsv1beta1.ConfigMapKeyPort] = strconv.Itoa(smtp.Status.Connection.Port)
 	}
 
 	if smtp.Status.Connection.Username != "" {
-		configMapDefault.Data["smtp.username"] = smtp.Status.Connection.Username
+		configMapDefault.Data[extensionsv1beta1.ConfigMapKeyUsername] = smtp.Status.Connection.Username
+	}
+
+	if smtp.Status.Connection.Region != "" {
+		configMapDefault.Data[extensionsv1beta1.ConfigMapKeyRegion] = smtp.Status.Connection.Region
 	}
 
 	if smtp.Status.Connection.Password != "" {
-		secretDefault.Data["smtp.password"] = []byte(smtp.Status.Connection.Password)
+		secretDefault.Data[extensionsv1beta1.SecretKeyPassword] = []byte(smtp.Status.Connection.Password)
 	}
 
-	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, configMapDefault, k8ssync.ConfigMap(drupal, configMapDefault.Data, true, r.scheme))
+	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, configMapDefault, k8ssync.ConfigMap(drupal, configMapDefault.Data, configMapDefault.BinaryData, true, r.scheme))
 	if err != nil {
 		return status, errors.Wrap(err, "failed to sync ConfigMap")
 	}
@@ -974,6 +1232,12 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 		return status, errors.Wrap(err, "failed to sync Secret")
 	}
 	log.Infof("Synced Secret %s with status: %s", secretDefault.ObjectMeta.Name, result)
+
+	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, secretCertificate, k8ssync.Secret(drupal, secretCertificate.Data, true, r.scheme))
+	if err != nil {
+		return status, errors.Wrap(err, "failed to sync Secret")
+	}
+	log.Infof("Synced Secret %s with status: %s", secretCertificate.ObjectMeta.Name, result)
 
 	exec := &extensionsv1beta1.Exec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -995,41 +1259,50 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 						SecurityContext: &corev1.SecurityContext{
 							ReadOnlyRootFilesystem: &drupal.Spec.Exec.ReadOnly,
 						},
-						// @todo, ReadOnly
 						// The sleep command will return an "Exit 0" after the timeout is up.
 						// This means the pod will stop and be marked as complete.
 						Command: []string{
-							"sleep",
-							strconv.Itoa(drupal.Spec.Exec.Timeout),
+							"sleep", strconv.Itoa(drupal.Spec.Exec.Timeout),
 						},
 						Resources: drupal.Spec.Exec.Resources,
 						Env: []corev1.EnvVar{
 							generate.EnvVar(PodEnvSkipperEnv, drupal.ObjectMeta.Name),
+							generate.EnvVar(PHPMemoryLimit, fmt.Sprintf("%dM", drupal.Spec.Exec.Configuration.MemoryLimit)),
 							generate.EnvVarConfigMap(PodEnvNewRelicApp, drupal.Spec.NewRelic.ConfigMap.Name, configMapOverride, true),
 							generate.EnvVarSecret(PodEnvNewRelicLicense, drupal.Spec.NewRelic.Secret.License, secretOverride, true),
 							generate.EnvVarConfigMap(PodEnvNewRelicEnabled, drupal.Spec.NewRelic.ConfigMap.Enabled, configMapOverride, true),
 						},
 						VolumeMounts: []corev1.VolumeMount{
+							generate.Mount(VolumeConfigData, drupal.Spec.ConfigMap.Data.Path, true),
+							generate.Mount(VolumeSecretCertificate, drupal.Spec.Secret.Certificate.Path, true),
+							generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
+							generate.Mount(VolumeTemporary, drupal.Spec.Volume.Temporary.Path, false),
+							generate.Mount(VolumePrivate, drupal.Spec.Volume.Private.Path, false),
+
+							// @expire Feb 2020
+							// Deprecated: These will be removed in a future release.
 							generate.Mount(VolumeConfigDefault, drupal.Spec.ConfigMap.Default.Path, true),
 							generate.Mount(VolumeConfigOverride, drupal.Spec.ConfigMap.Override.Path, true),
 							generate.Mount(VolumeSecretDefault, drupal.Spec.Secret.Default.Path, true),
 							generate.Mount(VolumeSecretOverride, drupal.Spec.Secret.Override.Path, true),
-							generate.Mount(VolumePublic, drupal.Spec.Volume.Public.Path, false),
-							generate.Mount(VolumeTemporary, drupal.Spec.Volume.Temporary.Path, false),
-							generate.Mount(VolumePrivate, drupal.Spec.Volume.Private.Path, false),
 						},
 						TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
 				Volumes: []corev1.Volume{
+					generate.VolumeConfigMap(VolumeConfigData, configMapData.ObjectMeta.Name),
+					generate.VolumeSecret(VolumeSecretCertificate, secretCertificate.ObjectMeta.Name),
+					generate.VolumeClaim(VolumePublic, pvcPublic.ObjectMeta.Name),
+					generate.VolumeClaim(VolumeTemporary, pvcTemporary.ObjectMeta.Name),
+					generate.VolumeClaim(VolumePrivate, pvcPrivate.ObjectMeta.Name),
+
+					// @expire Feb 2020
+					// Deprecated: These will be removed in a future release.
 					generate.VolumeConfigMap(VolumeConfigDefault, configMapDefault.ObjectMeta.Name),
 					generate.VolumeConfigMap(VolumeConfigOverride, configMapOverride.ObjectMeta.Name),
 					generate.VolumeSecret(VolumeSecretDefault, secretDefault.ObjectMeta.Name),
 					generate.VolumeSecret(VolumeSecretOverride, secretOverride.ObjectMeta.Name),
-					generate.VolumeClaim(VolumePublic, pvcPublic.ObjectMeta.Name),
-					generate.VolumeClaim(VolumeTemporary, pvcTemporary.ObjectMeta.Name),
-					generate.VolumeClaim(VolumePrivate, pvcPrivate.ObjectMeta.Name),
 				},
 				// The below are fields which need to be set so we can perform an "deep equal"
 				// without always having difference.
@@ -1048,34 +1321,18 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	}
 	log.Infof("Synced Exec %s with status: %s", exec.ObjectMeta.Name, result)
 
-	backup := &extensionsv1beta1.Backup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: drupal.ObjectMeta.Namespace,
-			Labels: map[string]string{
-				LabelAppName: drupal.ObjectMeta.Name,
-				LabelAppType: Application,
-			},
-		},
-		Spec: extensionsv1beta1.BackupSpec{
-			Schedule: drupal.Spec.Backup.Schedule,
-			Volumes: map[string]extensionsv1beta1.BackupSpecVolume{
-				VolumePublic: {
-					ClaimName: pvcPublic.ObjectMeta.Name,
-				},
-				VolumePrivate: {
-					ClaimName: pvcPrivate.ObjectMeta.Name,
-				},
-			},
-			MySQL: mysqlBackup,
-		},
+	consolidated, err := BuildConslidatedConfig(configMapDefault, configMapOverride, secretDefault, secretOverride)
+	if err != nil {
+		return status, errors.Wrap(err, "failed to build consolidated config")
 	}
 
-	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, backup, k8ssync.Backup(drupal, backup.Spec, r.scheme))
+	configMapData.BinaryData[ConfigMapDataConfigJSON] = consolidated
+
+	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, configMapData, k8ssync.ConfigMap(drupal, configMapData.Data, configMapData.BinaryData, true, r.scheme))
 	if err != nil {
-		return status, errors.Wrap(err, "failed to sync Backup")
+		return status, errors.Wrap(err, "failed to sync ConfigMap")
 	}
-	log.Infof("Synced Backup %s with status: %s", backup.ObjectMeta.Name, result)
+	log.Infof("Synced ConfigMap %s with status: %s", configMapData.ObjectMeta.Name, result)
 
 	status = appv1beta1.DrupalStatus{
 		ObservedGeneration: drupal.ObjectMeta.Generation,
@@ -1114,8 +1371,13 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 			},
 		},
 		MySQL: mysqlStatus,
+		Solr:  solrStatus,
 		Cron:  cronStatus,
 		ConfigMap: appv1beta1.DrupalStatusConfigMaps{
+			Data: appv1beta1.DrupalStatusConfigMap{
+				Name:  configMapData.ObjectMeta.Name,
+				Count: len(configMapData.Data),
+			},
 			Default: appv1beta1.DrupalStatusConfigMap{
 				Name:  configMapDefault.ObjectMeta.Name,
 				Count: len(configMapDefault.Data),
@@ -1134,16 +1396,16 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 				Name:  secretOverride.ObjectMeta.Name,
 				Count: len(secretOverride.Data),
 			},
+			Certificate: appv1beta1.DrupalStatusSecret{
+				Name:  secretCertificate.ObjectMeta.Name,
+				Count: len(secretCertificate.Data),
+			},
 		},
 		Exec: appv1beta1.DrupalStatusExec{
 			Name: exec.ObjectMeta.Name,
 		},
 		SMTP: appv1beta1.DrupalStatusSMTP{
 			Verification: smtp.Status.Verification,
-		},
-		Backup: appv1beta1.DrupalStatusBackup{
-			Name:             backup.ObjectMeta.Name,
-			LastScheduleTime: backup.Status.LastScheduleTime,
 		},
 	}
 
@@ -1154,6 +1416,9 @@ func (r *ReconcileDrupal) Sync(log log.Logger, drupal *appv1beta1.Drupal) (appv1
 	if status.FPM.Phase == deploymentutils.PhaseDeployed {
 		status.FPM.Image = drupal.Spec.FPM.Image
 	}
+
+	// @todo, Autoscaling Metrics.
+	// @todo, Pod Metrics.
 
 	return status, nil
 }

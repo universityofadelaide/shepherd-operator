@@ -1,6 +1,8 @@
 package mysql
 
 import (
+	"io/ioutil"
+
 	"github.com/alecthomas/kingpin"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
@@ -11,8 +13,10 @@ import (
 
 // SharedCommand provides context for the "shared" command.
 type SharedCommand struct {
-	name string
-	conn shared.Connection
+	// Path to the CA file, loaded and added to the params.
+	caFile string
+	// Params passed into the controller.
+	params shared.Params
 }
 
 func (d *SharedCommand) run(c *kingpin.ParseContext) error {
@@ -21,7 +25,16 @@ func (d *SharedCommand) run(c *kingpin.ParseContext) error {
 		return errors.Wrap(err, "new manager failed")
 	}
 
-	if err := shared.Add(mgr, d.name, d.conn); err != nil {
+	if d.caFile != "" {
+		data, err := ioutil.ReadFile(d.caFile)
+		if err != nil {
+			return errors.Wrap(err, "failed to load CAfile")
+		}
+
+		d.params.Connection.CA = string(data)
+	}
+
+	if err := shared.Add(mgr, d.params); err != nil {
 		return errors.Wrap(err, "add to manager failed")
 	}
 
@@ -32,9 +45,23 @@ func (d *SharedCommand) run(c *kingpin.ParseContext) error {
 func Shared(app *kingpin.CmdClause) {
 	c := &SharedCommand{}
 	cmd := app.Command("shared", "Start the MySQL Shared operator").Action(c.run)
-	cmd.Flag("provisioner-name", "Name of this provisioner").Envar("SKPR_MYSQL_PROVISIONER_NAME").Default("shared").StringVar(&c.name)
-	cmd.Flag("hostname", "Hostname which will be used to provision databases").Envar("SKPR_MYSQL_HOSTNAME").StringVar(&c.conn.Hostname)
-	cmd.Flag("port", "Port which will be used to provision databases").Envar("SKPR_MYSQL_PORT").IntVar(&c.conn.Port)
-	cmd.Flag("username", "Username which will be used to provision databases").Envar("SKPR_MYSQL_USERNAME").StringVar(&c.conn.Username)
-	cmd.Flag("password", "Password which will be used to provision databases").Envar("SKPR_MYSQL_PASSWORD").StringVar(&c.conn.Password)
+	cmd.Flag("provisioner-name", "Name of this provisioner").
+		Envar("SKPR_MYSQL_PROVISIONER_NAME").
+		Default("shared").
+		StringVar(&c.params.ProvisionerName)
+	cmd.Flag("hostname", "Hostname which will be used to provision databases").
+		Envar("SKPR_MYSQL_HOSTNAME").
+		StringVar(&c.params.Connection.Hostname)
+	cmd.Flag("port", "Port which will be used to provision databases").
+		Envar("SKPR_MYSQL_PORT").
+		IntVar(&c.params.Connection.Port)
+	cmd.Flag("username", "Username which will be used to provision databases").
+		Envar("SKPR_MYSQL_USERNAME").
+		StringVar(&c.params.Connection.Username)
+	cmd.Flag("password", "Password which will be used to provision databases").
+		Envar("SKPR_MYSQL_PASSWORD").
+		StringVar(&c.params.Connection.Password)
+	cmd.Flag("ca", "Path to a CA file used when provisioning databases").
+		Envar("SKPR_MYSQL_CA").
+		StringVar(&c.caFile)
 }

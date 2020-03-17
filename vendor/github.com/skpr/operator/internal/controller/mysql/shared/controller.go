@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	skprmetav1 "github.com/skpr/operator/pkg/apis/meta/v1"
 	mysqlv1beta1 "github.com/skpr/operator/pkg/apis/mysql/v1beta1"
 	"github.com/skpr/operator/pkg/mysql"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
@@ -35,18 +36,17 @@ const (
 
 // Add creates a new Database Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, name string, conn Connection) error {
-	return add(mgr, newReconciler(mgr, name, conn))
+func Add(mgr manager.Manager, params Params) error {
+	return add(mgr, newReconciler(mgr, params))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, name string, conn Connection) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, params Params) reconcile.Reconciler {
 	return &ReconcileDatabase{
-		ProvisionerName: name,
-		Client:          mgr.GetClient(),
-		recorder:        mgr.GetRecorder(ControllerName),
-		scheme:          mgr.GetScheme(),
-		Connection:      conn,
+		Client:   mgr.GetClient(),
+		recorder: mgr.GetRecorder(ControllerName),
+		scheme:   mgr.GetScheme(),
+		params:   params,
 	}
 }
 
@@ -66,11 +66,16 @@ var _ reconcile.Reconciler = &ReconcileDatabase{}
 
 // ReconcileDatabase reconciles a Database object
 type ReconcileDatabase struct {
-	ProvisionerName string
 	client.Client
-	recorder   record.EventRecorder
-	scheme     *runtime.Scheme
-	Connection Connection
+	recorder record.EventRecorder
+	scheme   *runtime.Scheme
+	params   Params
+}
+
+// Params passed into the Reconciler.
+type Params struct {
+	ProvisionerName string
+	Connection      Connection
 }
 
 // Connection details users for provisioning databases, users and grants.
@@ -79,6 +84,8 @@ type Connection struct {
 	Port     int
 	Username string
 	Password string
+	// We use this CA for the .Status.CA field.
+	CA string
 }
 
 // Reconcile reads that state of the cluster for a Database object and makes changes based on the state read
@@ -102,12 +109,12 @@ func (r *ReconcileDatabase) Reconcile(request reconcile.Request) (reconcile.Resu
 	}
 
 	// @todo, Can we filter upstream to avoid reconciles?
-	if database.Spec.Provisioner != r.ProvisionerName {
+	if database.Spec.Provisioner != r.params.ProvisionerName {
 		log.Info("Skipping because database is not set to this provisioner:", database.Spec.Provisioner)
 		return reconcile.Result{}, nil
 	}
 
-	client, err := mysql.New(r.Connection.Hostname, r.Connection.Username, r.Connection.Password, r.Connection.Port)
+	client, err := mysql.New(r.params.Connection.Hostname, r.params.Connection.Username, r.params.Connection.Password, r.params.Connection.Port)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to setup MySQL client")
 	}
@@ -157,11 +164,12 @@ func (r *ReconcileDatabase) Reconcile(request reconcile.Request) (reconcile.Resu
 	status := mysqlv1beta1.DatabaseStatus{
 		ObservedGeneration: database.Generation,
 		Connection: mysqlv1beta1.DatabaseStatusConnection{
-			Hostname: r.Connection.Hostname,
-			Port:     r.Connection.Port,
+			Hostname: r.params.Connection.Hostname,
+			Port:     r.params.Connection.Port,
 			Database: name,
 			Username: name,
 			Password: random.String(16),
+			CA:       r.params.Connection.CA,
 		},
 	}
 
@@ -209,7 +217,7 @@ func (r *ReconcileDatabase) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	status.Phase = mysqlv1beta1.PhaseReady
+	status.Phase = skprmetav1.PhaseReady
 
 	log.Info("Syncing status")
 

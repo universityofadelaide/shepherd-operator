@@ -41,6 +41,7 @@ func (m *Client) RequestCertificate(input *acm.RequestCertificateInput) (*acm.Re
 					Type:  aws.String("bbbbbbbbbbbbb"),
 					Value: aws.String("ccccccccccccc"),
 				},
+				ValidationStatus: aws.String(acm.CertificateStatusIssued),
 			},
 			{
 				ResourceRecord: &acm.ResourceRecord{
@@ -48,6 +49,7 @@ func (m *Client) RequestCertificate(input *acm.RequestCertificateInput) (*acm.Re
 					Type:  aws.String("eeeeeeeeeeeee"),
 					Value: aws.String("fffffffffffff"),
 				},
+				ValidationStatus: aws.String(acm.CertificateStatusIssued),
 			},
 			{
 				ResourceRecord: &acm.ResourceRecord{
@@ -55,6 +57,7 @@ func (m *Client) RequestCertificate(input *acm.RequestCertificateInput) (*acm.Re
 					Type:  aws.String("hhhhhhhhhhhhh"),
 					Value: aws.String("iiiiiiiiiiiii"),
 				},
+				ValidationStatus: aws.String(acm.CertificateStatusIssued),
 			},
 		},
 		Status: aws.String(acm.CertificateStatusIssued),

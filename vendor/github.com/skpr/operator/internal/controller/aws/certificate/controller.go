@@ -3,7 +3,6 @@ package certificate
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
@@ -141,17 +140,22 @@ func (r *ReconcileCertificate) Sync(certificate *awsv1beta1.Certificate) (awsv1b
 		LabelCertificate: certificate.ObjectMeta.Name,
 	}
 
+	name, err := getHash(certificate.Spec.Request)
+	if err != nil {
+		return status, errors.Wrap(err, "failed to get hash")
+	}
+
 	// This is the CertificateRequest we want based on the CommonName and AlternativeNames provided.
 	desired := &awsv1beta1.CertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", certificate.ObjectMeta.Name, certificate.Spec.Request.Hash()),
+			Name:      fmt.Sprintf("%s-%s", certificate.ObjectMeta.Name, name),
 			Namespace: certificate.ObjectMeta.Namespace,
 			Labels:    selector,
 		},
 		Spec: certificate.Spec.Request,
 	}
 
-	_, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, desired, k8ssync.CertificateRequest(certificate, desired.Spec, r.scheme))
+	_, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, desired, k8ssync.CertificateRequest(certificate, desired.Spec, r.scheme))
 	if err != nil {
 		return status, errors.Wrap(err, "failed to sync CertificateRequest")
 	}
@@ -168,9 +172,7 @@ func (r *ReconcileCertificate) Sync(certificate *awsv1beta1.Certificate) (awsv1b
 		return status, err
 	}
 
-	sort.SliceStable(list.Items, func(i, j int) bool {
-		return list.Items[i].ObjectMeta.CreationTimestamp.Time.Unix() < list.Items[j].ObjectMeta.CreationTimestamp.Time.Unix()
-	})
+	sortRequests(list)
 
 	status.Desired = requestToReference(*desired)
 	status.Active = getActiveRequestStatus(*desired, list.Items)
@@ -203,12 +205,20 @@ func (r *ReconcileCertificate) SyncStatus(certificate *awsv1beta1.Certificate, s
 
 // Cleanup old Requests which are not issued.
 func (r *ReconcileCertificate) Cleanup(certificate *awsv1beta1.Certificate, retention int) error {
-	for key, item := range certificate.Status.Requests {
-		if key < retention {
+	var count = 0
+
+	for _, item := range certificate.Status.Requests {
+		if item.Name == certificate.Status.Active.Name {
 			continue
 		}
 
-		if item.Name == certificate.Status.Active.Name {
+		if item.Name == certificate.Status.Desired.Name {
+			continue
+		}
+
+		count++
+
+		if count <= retention {
 			continue
 		}
 

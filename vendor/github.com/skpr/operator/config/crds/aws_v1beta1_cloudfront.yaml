@@ -105,6 +105,10 @@ spec:
             arn:
               description: Machine identifier for querying the CloudFront distribution.
               type: string
+            callerReference:
+              description: CallerReference used to ensure we don't create more than
+                1 resource.
+              type: string
             domainName:
               description: DomainName for creating CNAME records.
               type: string

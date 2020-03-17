@@ -2,6 +2,8 @@ package v1beta1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	skprmetav1 "github.com/skpr/operator/pkg/apis/meta/v1"
 )
 
 // DatabaseSpec defines the desired state of Database
@@ -12,24 +14,14 @@ type DatabaseSpec struct {
 	Privileges []string `json:"privileges"`
 }
 
-// Phase which indicates the status of an object.
-type Phase string
-
-const (
-	// PhaseFailed to be assigned when the database provisioning fails.
-	PhaseFailed Phase = "Failed"
-	// PhaseReady to be assigned when the database is ready for connections.
-	PhaseReady Phase = "Ready"
-)
-
 // DatabaseStatus defines the observed state of Database
 type DatabaseStatus struct {
 	// Used for determining if an APIs information is up to date.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Current state of the database being provisioned.
-	Phase Phase `json:"phase"`
+	Phase skprmetav1.Phase `json:"phase,omitempty"`
 	// Connection details for the database.
-	Connection DatabaseStatusConnection `json:"connection"`
+	Connection DatabaseStatusConnection `json:"connection,omitempty"`
 }
 
 // DatabaseStatusConnection for applications.
@@ -44,6 +36,8 @@ type DatabaseStatusConnection struct {
 	Username string `json:"username,omitempty"`
 	// Password used when connecting to the database.
 	Password string `json:"password,omitempty"`
+	// CA used when connecting to the database.
+	CA string `json:"ca,omitempty"`
 }
 
 // +genclient

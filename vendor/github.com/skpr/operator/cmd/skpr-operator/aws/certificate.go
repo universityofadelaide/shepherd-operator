@@ -31,5 +31,8 @@ func (d *CertificateCommand) run(c *kingpin.ParseContext) error {
 func Certificate(app *kingpin.CmdClause) {
 	c := &CertificateCommand{}
 	cmd := app.Command("certificate", "Start the AWS Certificate operator").Action(c.run)
-	cmd.Flag("retention", "How many CertificateRequests to keep before cleaning up").Envar("SKPR_OPERATOR_CERTIFICATE_RETENTION").Default("5").IntVar(&c.params.Retention)
+	cmd.Flag("retention", "How many CertificateRequests to keep before cleaning up").
+		Envar("SKPR_OPERATOR_CERTIFICATE_RETENTION").
+		Default("5").
+		IntVar(&c.params.Retention)
 }

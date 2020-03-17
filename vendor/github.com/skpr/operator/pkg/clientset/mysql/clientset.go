@@ -6,11 +6,21 @@ import (
 	"k8s.io/client-go/rest"
 
 	mysqlv1beta1 "github.com/skpr/operator/pkg/apis/mysql/v1beta1"
+	"github.com/skpr/operator/pkg/clientset/mysql/database"
 )
 
-// ClientInterface for interacting with AWS subclients.
-type ClientInterface interface {
-	Databases(namespace string) DatabaseInterface
+const (
+	// Group which this clientset interacts with.
+	Group = "mysql.skpr.io"
+	// Version which this clientset interacts with.
+	Version = "v1beta1"
+	// APIVersion which this clientset interacts with.
+	APIVersion = "mysql.skpr.io/v1beta1"
+)
+
+// Interface for interacting with AWS subclients.
+type Interface interface {
+	Databases(namespace string) database.Interface
 }
 
 // Client for interacting with Operator objects.
@@ -35,8 +45,8 @@ func NewForConfig(c *rest.Config) (*Client, error) {
 }
 
 // Databases within a namespace.
-func (c *Client) Databases(namespace string) DatabaseInterface {
-	return &databaseClient{
+func (c *Client) Databases(namespace string) database.Interface {
+	return &database.Client{
 		RestClient: c.RestClient,
 		Namespace:  namespace,
 	}

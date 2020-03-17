@@ -1,17 +1,32 @@
 package v1beta1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	skprmetav1 "github.com/skpr/operator/pkg/apis/meta/v1"
+	"github.com/skpr/operator/pkg/utils/slice"
 )
 
 // BackupSpec defines the desired state of Backup
 type BackupSpec struct {
-	// Frequency which the application will be backed up.
-	Schedule string `json:"schedule"`
+	// Secret which defines information about the restic secret.
+	Secret BackupSpecSecret `json:"secret"`
 	// Volumes which will be backed up.
 	Volumes map[string]BackupSpecVolume `json:"volumes,omitempty"`
 	// MySQL databases which will be backed up.
 	MySQL map[string]BackupSpecMySQL `json:"mysql,omitempty"`
+	// Tags to apply to the restic backup.
+	Tags []string `json:"tags,omitempty"`
+}
+
+// BackupSpecSecret defines information for the restic secret.
+type BackupSpecSecret struct {
+	// Name of the secret.
+	Name string `json:"name"`
+	// Key of the secret data to use for the password
+	Key string `json:"key"`
 }
 
 // BackupSpecVolume defines how to backup volumes.
@@ -38,11 +53,11 @@ type BackupSpecMySQLConfigMap struct {
 
 // BackupSpecMySQLConfigMapKeys defines ConfigMap keys for MySQL connectivity.
 type BackupSpecMySQLConfigMapKeys struct {
-	// Key which was applied to the application for database connectivity.
+	// Database which was applied to the application for database connectivity.
 	Database string `json:"database"`
-	// Key which was applied to the application for database connectivity.
+	// Hostname which was applied to the application for database connectivity.
 	Hostname string `json:"hostname"`
-	// Key which was applied to the application for database connectivity.
+	// Port which was applied to the application for database connectivity.
 	Port string `json:"port"`
 }
 
@@ -64,8 +79,14 @@ type BackupSpecMySQLSecretKeys struct {
 
 // BackupStatus defines the observed state of Backup
 type BackupStatus struct {
-	// Last time a backup was executed.
-	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
+	// The time the backup started.
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// The time the backup completed.
+	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
+	// The restic id for the backup.
+	ResticID string `json:"resticId,omitempty"`
+	// The phase the backup is in.
+	Phase skprmetav1.Phase `json:"phase"`
 }
 
 // +genclient
@@ -93,4 +114,19 @@ type BackupList struct {
 
 func init() {
 	SchemeBuilder.Register(&Backup{}, &BackupList{})
+}
+
+// GetDuration returns the duration of the backup.
+func (b Backup) GetDuration() *time.Duration {
+	if b.Status.StartTime != nil && b.Status.CompletionTime != nil {
+		duration := b.Status.CompletionTime.Sub(b.Status.StartTime.Time)
+		return &duration
+	}
+
+	return nil
+}
+
+// HasTag checks if this backup has a tag.
+func (b Backup) HasTag(tag string) bool {
+	return slice.Contains(b.Spec.Tags, tag)
 }

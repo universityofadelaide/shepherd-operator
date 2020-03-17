@@ -14,20 +14,30 @@ import (
 
 // Interface for interacting with Operator subclients.
 type Interface interface {
-	App() app.ClientInterface
-	AWS() aws.ClientInterface
-	Edge() edge.ClientInterface
-	Extensions() extensions.ClientInterface
-	MySQL() mysql.ClientInterface
+	App() app.Interface
+	AWS() aws.Interface
+	Edge() edge.Interface
+	Extensions() extensions.Interface
+	MySQL() mysql.Interface
 }
 
-// Client for interacting with Operator objects.
-type Client struct {
-	app        app.ClientInterface
-	aws        aws.ClientInterface
-	edge       edge.ClientInterface
-	extensions extensions.ClientInterface
-	mysql      mysql.ClientInterface
+// Clientset for interacting with Operator objects.
+type Clientset struct {
+	Clients
+}
+
+// Clients used as part of the clientset.
+type Clients struct {
+	App        app.Interface
+	AWS        aws.Interface
+	Edge       edge.Interface
+	Extensions extensions.Interface
+	Mysql      mysql.Interface
+}
+
+// New clientset using a set of clients.
+func New(clients Clients) (Interface, error) {
+	return &Clientset{clients}, nil
 }
 
 // NewForConfig creates a new Clientset for the given config.
@@ -57,38 +67,40 @@ func NewForConfig(config *rest.Config) (Interface, error) {
 		return nil, err
 	}
 
-	return &Client{
-		app:        appClient,
-		aws:        awsClient,
-		edge:       edgeClient,
-		extensions: extensionsClient,
-		mysql:      mysqlClient,
-	}, nil
+	clients := Clients{
+		App:        appClient,
+		AWS:        awsClient,
+		Edge:       edgeClient,
+		Extensions: extensionsClient,
+		Mysql:      mysqlClient,
+	}
+
+	return New(clients)
 }
 
 // App clientset.
-func (c *Client) App() app.ClientInterface {
-	return c.app
+func (c *Clientset) App() app.Interface {
+	return c.Clients.App
 }
 
 // AWS clientset.
-func (c *Client) AWS() aws.ClientInterface {
-	return c.aws
+func (c *Clientset) AWS() aws.Interface {
+	return c.Clients.AWS
 }
 
 // Edge clientset.
-func (c *Client) Edge() edge.ClientInterface {
-	return c.edge
+func (c *Clientset) Edge() edge.Interface {
+	return c.Clients.Edge
 }
 
 // Extensions clientset.
-func (c *Client) Extensions() extensions.ClientInterface {
-	return c.extensions
+func (c *Clientset) Extensions() extensions.Interface {
+	return c.Clients.Extensions
 }
 
 // MySQL clientset.
-func (c *Client) MySQL() mysql.ClientInterface {
-	return c.mysql
+func (c *Clientset) MySQL() mysql.Interface {
+	return c.Clients.Mysql
 }
 
 func init() {

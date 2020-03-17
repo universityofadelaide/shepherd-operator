@@ -3,7 +3,6 @@ package restic
 import (
 	"fmt"
 
-	extensionsv1beta1 "github.com/skpr/operator/pkg/apis/extensions/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -17,15 +16,12 @@ const (
 	// EnvResticPasswordFile for Restic configuration.
 	EnvResticPasswordFile = "RESTIC_PASSWORD_FILE"
 
-	// ResticPassword identifier for loading the restic password.
-	ResticPassword = "password"
-
 	// SecretDir defines the directory where secrets are mounted.
 	SecretDir = "/etc/restic"
 )
 
 // WrapContainer with the information required to interact with Restic.
-func WrapContainer(container corev1.Container, key, secret, bucket string, backup *extensionsv1beta1.Backup) corev1.Container {
+func WrapContainer(container corev1.Container, key, secret, bucket, repository, passwordFile string) corev1.Container {
 	envs := []corev1.EnvVar{
 		{
 			Name:  EnvAWSAccessKeyID,
@@ -37,11 +33,11 @@ func WrapContainer(container corev1.Container, key, secret, bucket string, backu
 		},
 		{
 			Name:  EnvResticRepository,
-			Value: fmt.Sprintf("%s/%s/%s", bucket, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
+			Value: fmt.Sprintf("%s/%s", bucket, repository),
 		},
 		{
 			Name:  EnvResticPasswordFile,
-			Value: fmt.Sprintf("%s/%s", SecretDir, ResticPassword),
+			Value: fmt.Sprintf("%s/%s", SecretDir, passwordFile),
 		},
 	}
 

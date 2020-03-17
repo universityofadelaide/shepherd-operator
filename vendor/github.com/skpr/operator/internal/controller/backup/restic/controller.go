@@ -7,10 +7,10 @@ import (
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -21,9 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	extensionsv1beta1 "github.com/skpr/operator/pkg/apis/extensions/v1beta1"
+	skprmetav1 "github.com/skpr/operator/pkg/apis/meta/v1"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
-	k8ssync "github.com/skpr/operator/pkg/utils/k8s/sync"
-	"github.com/skpr/operator/pkg/utils/random"
+	jobutils "github.com/skpr/operator/pkg/utils/k8s/job"
+	"github.com/skpr/operator/pkg/utils/k8s/pod/logs"
+	"github.com/skpr/operator/pkg/utils/k8s/sync"
 	resticutils "github.com/skpr/operator/pkg/utils/restic"
 )
 
@@ -33,16 +35,25 @@ const ControllerName = "backup-restic-controller"
 // Add creates a new Backup Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, params Params) error {
-	return add(mgr, newReconciler(mgr, params))
+	r, err := newReconciler(mgr, params)
+	if err != nil {
+		return err
+	}
+	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, params Params) reconcile.Reconciler {
-	return &ReconcileBackup{
-		Client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		params: params,
+func newReconciler(mgr manager.Manager, params Params) (reconcile.Reconciler, error) {
+	logsClient, err := logs.New(mgr.GetConfig())
+	if err != nil {
+		return &ReconcileBackup{}, err
 	}
+	return &ReconcileBackup{
+		Client:    mgr.GetClient(),
+		LogClient: logsClient,
+		scheme:    mgr.GetScheme(),
+		params:    params,
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -52,7 +63,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &batchv1beta1.CronJob{}}, &handler.EnqueueRequestForOwner{
+	err = c.Watch(&source.Kind{Type: &batchv1.Job{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &extensionsv1beta1.Backup{},
 	})
@@ -68,28 +79,21 @@ var _ reconcile.Reconciler = &ReconcileBackup{}
 // ReconcileBackup reconciles a Backup object
 type ReconcileBackup struct {
 	client.Client
-	scheme *runtime.Scheme
-	params Params
+	LogClient logs.Interface
+	scheme    *runtime.Scheme
+	params    Params
 }
 
 // Params which are passed into this controller.
 type Params struct {
-	Pod     resticutils.PodSpecParams
-	CronJob ParamsCronJob
-}
-
-// ParamsCronJob used for grouping CronJob configuration.
-type ParamsCronJob struct {
-	StartingDeadline int64
-	ActiveDeadline   int64
-	BackoffLimit     int32
-	SuccessHistory   int32
-	FailedHistory    int32
+	Pod resticutils.PodSpecParams
 }
 
 // Reconcile reads that state of the cluster for a Backup object and makes changes based on the state read
 // and what is in the Backup.Spec
-// Automatically generate RBAC rules to allow the Controller to read and write Deployments
+// Automatically generate RBAC rules to allow the Controller to read and write Jobs.
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 // +kubebuilder:rbac:groups=extensions.skpr.io,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extensions.skpr.io,resources=backups/status,verbs=get;update;patch
 func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -108,72 +112,45 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
-			Namespace: backup.ObjectMeta.Namespace,
-		},
-		Data: map[string][]byte{
-			resticutils.ResticPassword: []byte(random.String(32)),
-		},
-	}
-
-	log.Info("Syncing Secret")
-
-	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, secret, k8ssync.Secret(backup, secret.Data, false, r.scheme))
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	log.Infof("Synced Secret %s with status: %s", secret.ObjectMeta.Name, result)
-
-	spec, err := resticutils.PodSpec(backup, r.params.Pod)
+	spec, err := resticutils.PodSpecBackup(backup, r.params.Pod)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	var (
-		parallelism int32 = 1
-		completions int32 = 1
-	)
-
-	cronjob := &batchv1beta1.CronJob{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
-			Namespace: backup.ObjectMeta.Namespace,
-		},
-		Spec: batchv1beta1.CronJobSpec{
-			Schedule:                   backup.Spec.Schedule,
-			ConcurrencyPolicy:          batchv1beta1.ForbidConcurrent,
-			StartingDeadlineSeconds:    &r.params.CronJob.StartingDeadline,
-			SuccessfulJobsHistoryLimit: &r.params.CronJob.SuccessHistory,
-			FailedJobsHistoryLimit:     &r.params.CronJob.FailedHistory,
-			JobTemplate: batchv1beta1.JobTemplateSpec{
-				Spec: batchv1.JobSpec{
-					Parallelism:           &parallelism,
-					Completions:           &completions,
-					ActiveDeadlineSeconds: &r.params.CronJob.ActiveDeadline,
-					BackoffLimit:          &r.params.CronJob.BackoffLimit,
-					Template: corev1.PodTemplateSpec{
-						Spec: spec,
-					},
-				},
-			},
-		},
-	}
-
-	log.Info("Syncing CronJob")
-
-	result, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, cronjob, k8ssync.CronJob(backup, cronjob.Spec, r.scheme))
+	job, err := jobutils.NewFromPod(metav1.ObjectMeta{
+		Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
+		Namespace: backup.ObjectMeta.Namespace,
+	}, spec)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	log.Infof("Synced CronJob %s with status: %s", cronjob.ObjectMeta.Name, result)
 
+	log.Info("Syncing Job")
+
+	result, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(backup, r.scheme))
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	log.Infof("Synced Job %s with status: %s", job.ObjectMeta.Name, result)
+
+	log.Info("Syncing Backup status")
 	status := extensionsv1beta1.BackupStatus{
-		LastScheduleTime: cronjob.Status.LastScheduleTime,
+		Phase:          jobutils.GetPhase(job.Status),
+		StartTime:      job.Status.StartTime,
+		CompletionTime: job.Status.CompletionTime,
 	}
 
-	log.Info("Syncing status")
+	if status.Phase == skprmetav1.PhaseCompleted {
+		resticID, err := r.getResticIDFromJob(job)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed to parse resticID")
+		}
+		if resticID != "" {
+			status.ResticID = resticID
+		} else {
+			status.Phase = skprmetav1.PhaseFailed
+		}
+	}
 
 	if diff := deep.Equal(backup.Status, status); diff != nil {
 		log.Info(fmt.Sprintf("Status change dectected: %s", diff))
@@ -189,4 +166,34 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 	log.Info("Reconcile finished")
 
 	return reconcile.Result{}, nil
+}
+
+// getResticIDFromJob parses output from a job's pods and returns a restic ID from the logs.
+func (r *ReconcileBackup) getResticIDFromJob(job *batchv1.Job) (string, error) {
+	var resticID string
+
+	pods := corev1.PodList{}
+	err := r.List(context.TODO(), &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set(job.Spec.Template.ObjectMeta.Labels)),
+		Namespace:     job.ObjectMeta.Namespace,
+	}, &pods)
+	if err != nil {
+		return resticID, err
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != corev1.PodSucceeded {
+			continue
+		}
+		podLogs, err := r.LogClient.Get(pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, resticutils.ResticBackupContainerName)
+		if err != nil {
+			return resticID, err
+		}
+		resticID = resticutils.ParseSnapshotID(podLogs)
+		if resticID != "" {
+			return resticID, nil
+		}
+	}
+
+	return resticID, nil
 }

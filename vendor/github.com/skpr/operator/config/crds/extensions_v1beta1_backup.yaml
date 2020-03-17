@@ -33,21 +33,48 @@ spec:
             mysql:
               description: MySQL databases which will be backed up.
               type: object
-            schedule:
-              description: Frequency which the application will be backed up.
-              type: string
+            secret:
+              description: Secret which defines information about the restic secret.
+              properties:
+                key:
+                  description: Key of the secret data to use for the password
+                  type: string
+                name:
+                  description: Name of the secret.
+                  type: string
+              required:
+              - name
+              - key
+              type: object
+            tags:
+              description: Tags to apply to the restic backup.
+              items:
+                type: string
+              type: array
             volumes:
               description: Volumes which will be backed up.
               type: object
           required:
-          - schedule
+          - secret
           type: object
         status:
           properties:
-            lastScheduleTime:
-              description: Last time a backup was executed.
+            completionTime:
+              description: The time the backup completed.
               format: date-time
               type: string
+            phase:
+              description: The phase the backup is in.
+              type: string
+            resticId:
+              description: The restic id for the backup.
+              type: string
+            startTime:
+              description: The time the backup started.
+              format: date-time
+              type: string
+          required:
+          - phase
           type: object
   version: v1beta1
 status:

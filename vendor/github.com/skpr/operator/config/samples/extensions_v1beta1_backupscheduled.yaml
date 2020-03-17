@@ -1,0 +1,30 @@
+apiVersion: extensions.skpr.io/v1beta1
+kind: BackupScheduled
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: scheduled-sample
+spec:
+  schedule: "* * * * *"
+  template:
+    secret:
+      name: backup-sample-secret
+      key: password
+    volumes:
+      public:
+        claimName: drupal-dev-public
+      private:
+        claimName: drupal-dev-private
+    mysql:
+      default:
+        configmap:
+          name: drupal-dev
+          keys:
+            database: mysql.database
+            hostname: mysql.hostname
+            port: mysql.port
+        secret:
+          name: drupal-dev
+          keys:
+            username: mysql.username
+            password: mysql.password

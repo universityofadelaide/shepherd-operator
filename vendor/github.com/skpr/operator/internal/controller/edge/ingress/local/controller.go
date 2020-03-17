@@ -123,7 +123,8 @@ func (r *ReconcileIngress) Sync(log log.Logger, instance *edgev1beta1.Ingress) (
 			Annotations: map[string]string{
 				prometheus.AnnotationScrape: prometheus.ScrapeTrue,
 				prometheus.AnnotationScheme: prometheus.SchemeHTTPS,
-				prometheus.AnnotationPath:   prometheus.Path(instance.Spec.Prometheus.Path, instance.Spec.Prometheus.Token),
+				prometheus.AnnotationPath:   instance.Spec.Prometheus.Path,
+				prometheus.AnnotationToken:  instance.Spec.Prometheus.Token,
 			},
 		},
 	}

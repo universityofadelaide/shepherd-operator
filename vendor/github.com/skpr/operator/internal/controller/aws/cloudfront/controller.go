@@ -32,18 +32,18 @@ const (
 
 // Add creates a new CloudFront Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, cloudfront cloudfrontiface.CloudFrontAPI, prefix string) error {
-	return add(mgr, newReconciler(mgr, cloudfront, prefix))
+func Add(mgr manager.Manager, cloudfront cloudfrontiface.CloudFrontAPI, params Params) error {
+	return add(mgr, newReconciler(mgr, cloudfront, params))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, cloudfront cloudfrontiface.CloudFrontAPI, prefix string) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, cloudfront cloudfrontiface.CloudFrontAPI, params Params) reconcile.Reconciler {
 	return &ReconcileCloudFront{
 		Client:     mgr.GetClient(),
 		cloudfront: cloudfront,
-		prefix:     prefix,
 		recorder:   mgr.GetRecorder(ControllerName),
 		scheme:     mgr.GetScheme(),
+		params:     params,
 	}
 }
 
@@ -65,9 +65,15 @@ var _ reconcile.Reconciler = &ReconcileCloudFront{}
 type ReconcileCloudFront struct {
 	client.Client
 	cloudfront cloudfrontiface.CloudFrontAPI
-	prefix     string
 	recorder   record.EventRecorder
 	scheme     *runtime.Scheme
+	params     Params
+}
+
+// Params which are passed into this reconciler.
+type Params struct {
+	Prefix        string
+	LoggingBucket string
 }
 
 // Reconcile reads that state of the cluster for a CloudFront object and makes changes based on the state read
@@ -126,6 +132,15 @@ func (r *ReconcileCloudFront) Reconcile(request reconcile.Request) (reconcile.Re
 
 	log.Info("Syncing with CloudFront distribution")
 
+	// Unique identifier to ensure we don't create more than one CloudFront per instance.
+	generatedReference := fmt.Sprintf("%s-%s-%s", r.params.Prefix, instance.ObjectMeta.Namespace, instance.ObjectMeta.Name)
+
+	// When syncing we look to see if there is an existing reference which has been used.
+	// This also allows for custom references to be used when importing an existing CloudFront distribution.
+	if instance.Status.CallerReference == "" {
+		instance.Status.CallerReference = generatedReference
+	}
+
 	distribution, err := r.SyncExternal(log, instance)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -133,6 +148,7 @@ func (r *ReconcileCloudFront) Reconcile(request reconcile.Request) (reconcile.Re
 
 	status := awsv1beta1.CloudFrontStatus{
 		ObservedGeneration: instance.ObjectMeta.Generation,
+		CallerReference:    instance.Status.CallerReference,
 	}
 
 	if distribution != nil {

@@ -71,6 +71,8 @@ type CloudFrontStatus struct {
 	State string `json:"state,omitempty"`
 	// DomainName for creating CNAME records.
 	DomainName string `json:"domainName,omitempty"`
+	// CallerReference used to ensure we don't create more than 1 resource.
+	CallerReference string `json:"callerReference,omitempty"`
 	// How many invalidations are currently running.
 	RunningInvalidations int64 `json:"runningInvalidations,omitempty"`
 }

@@ -5,7 +5,9 @@ metadata:
     controller-tools.k8s.io: "1.0"
   name: backup-sample
 spec:
-  schedule: "@nightly"
+  secret:
+    name: backup-sample-secret
+    key: password
   volumes:
     public:
       claimName: drupal-dev-public

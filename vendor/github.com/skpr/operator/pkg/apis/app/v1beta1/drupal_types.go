@@ -5,6 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	extensionsv1beta1 "github.com/skpr/operator/pkg/apis/extensions/v1beta1"
+	searchv1beta1 "github.com/skpr/operator/pkg/apis/search/v1beta1"
 	deploymentutils "github.com/skpr/operator/pkg/utils/k8s/deployment"
 )
 
@@ -20,6 +21,8 @@ type DrupalSpec struct {
 	Volume DrupalSpecVolumes `json:"volume"`
 	// Database provisioned as part of the application eg. "default" and "migrate".
 	MySQL map[string]DrupalSpecMySQL `json:"mysql"`
+	// Solr instances provisioned as part of the application eg. "default" and "core2".
+	Solr map[string]DrupalSpecSolr `json:"solr"`
 	// Background tasks which are executed periodically eg. "drush cron"
 	Cron map[string]DrupalSpecCron `json:"cron"`
 	// Configuration which is exposed to the Drupal application eg. database hostname.
@@ -30,8 +33,6 @@ type DrupalSpec struct {
 	NewRelic DrupalSpecNewRelic `json:"newrelic"`
 	// SMTP configuration for outbound email.
 	SMTP DrupalSpecSMTP `json:"smtp"`
-	// Backup configuration for recovery.
-	Backup DrupalSpecBackup `json:"backup"`
 	// Prometheus configuration for https://www.drupal.org/project/prometheus_exporter.
 	Prometheus DrupalSpecPrometheus `json:"prometheus"`
 }
@@ -64,6 +65,8 @@ type DrupalSpecNginxAutoscaling struct {
 type DrupalSpecNginxAutoscalingTrigger struct {
 	// CPU threshold which will trigger autoscaling events.
 	CPU int32 `json:"cpu"`
+	// Memory threshold which will trigger autoscaling events.
+	Memory int32 `json:"memory"`
 }
 
 // DrupalSpecNginxAutoscalingReplicas contain autoscaling replica rules for the Nginx layer.
@@ -90,8 +93,31 @@ type DrupalSpecFPM struct {
 	ReadOnly bool `json:"readOnly"`
 	// Resource constraints which will be applied to the deployment.
 	Resources corev1.ResourceRequirements `json:"resources"`
+	// Configuration which will be used to tune the FPM pool.
+	Configuration DrupalSpecFPMConfiguration `json:"configuration"`
 	// Autoscaling rules which will be applied to the deployment.
 	Autoscaling DrupalSpecFPMAutoscaling `json:"autoscaling"`
+}
+
+// DrupalSpecFPMConfiguration is used to configure PHP-FPM.
+// Resource: https://gurdeep.ninja/php-fpm-process-management
+type DrupalSpecFPMConfiguration struct {
+	// Sets the environment variable PHP_MEMORY_LIMIT.
+	MemoryLimit int32 `json:"memoryLimit"`
+	// Sets the environment variable PHP_FPM_MAX_CHILDREN.
+	// Tip: Total Memory / Average Proc Size.
+	MaxChildren int32 `json:"maxChildren"`
+	// Sets the environment variable PHP_FPM_MIN_SPARE_SERVERS.
+	// Tip: MaxChildren * 0.2 (20% of the MaxChildren).
+	MinSpareServers int32 `json:"minSpareServers"`
+	// Sets the environment variable PHP_FPM_MAX_SPARE_SERVERS.
+	// Tip: MaxChildren * 0.6 (60% of the MaxChildren).
+	MaxSpareServers int32 `json:"maxSpareServers"`
+	// Sets the environment variable PHP_FPM_START_SERVERS.
+	// Tip: MinSpareServers + (MaxSpareServers – MinSpareServers) / 2
+	StartServers int32 `json:"startServers"`
+	// Sets the environment variable PHP_FPM_MAX_REQUESTS.
+	MaxRequests int32 `json:"maxRequests"`
 }
 
 // DrupalSpecFPMAutoscaling contain autoscaling rules for the FPM layer.
@@ -106,6 +132,10 @@ type DrupalSpecFPMAutoscaling struct {
 type DrupalSpecFPMAutoscalingTrigger struct {
 	// CPU threshold which will trigger autoscaling events.
 	CPU int32 `json:"cpu"`
+	// Memory threshold which will trigger autoscaling events.
+	Memory int32 `json:"memory"`
+	// Servers threshold which will trigger autoscaling events.
+	Servers int64 `json:"servers"`
 }
 
 // DrupalSpecFPMAutoscalingReplicas contain autoscaling replica rules for the FPM layer.
@@ -174,6 +204,16 @@ type DrupalSpecVolumePermissionsCronJob struct {
 type DrupalSpecMySQL struct {
 	// Database class which will be used when provisioning the database.
 	Class string `json:"class"`
+	// Size of the Solr service being provisioned.
+	Size string `json:"size"`
+}
+
+// DrupalSpecSolr configuration for this Drupal.
+type DrupalSpecSolr struct {
+	// Version of Solr which will be deployed for the service.
+	Version string `json:"version"`
+	// Resources given to the Solr instance.
+	Resources searchv1beta1.SolrSpecResources `json:"resources"`
 }
 
 // DrupalSpecCron configures a background task for this Drupal.
@@ -188,6 +228,8 @@ type DrupalSpecCron struct {
 	Schedule string `json:"schedule"`
 	// Resource constraints which will be applied to the background task.
 	Resources corev1.ResourceRequirements `json:"resources"`
+	// Configuration which will be used to tune the cron PHP session.
+	Configuration DrupalSpecCronConfiguration `json:"configuration"`
 	// How many times to execute before marking the task as a failure.
 	Retries int32 `json:"retries"`
 	// How many successful builds to keep.
@@ -196,8 +238,16 @@ type DrupalSpecCron struct {
 	KeepFailed int32 `json:"keepFailed"`
 }
 
+// DrupalSpecCronConfiguration is used to configure Cron executions.
+type DrupalSpecCronConfiguration struct {
+	// Sets the environment variable PHP_MEMORY_LIMIT.
+	MemoryLimit int32 `json:"memoryLimit"`
+}
+
 // DrupalSpecConfigMaps defines the spec for all configmaps.
 type DrupalSpecConfigMaps struct {
+	// Configuration which provides the application will data eg. JSON formatted config.
+	Data DrupalSpecConfigMap `json:"data"`
 	// Configuration which is automatically set.
 	Default DrupalSpecConfigMap `json:"default"`
 	// Configuration which is user provided.
@@ -216,6 +266,8 @@ type DrupalSpecSecrets struct {
 	Default DrupalSpecSecret `json:"default"`
 	// Secrets which are user provided.
 	Override DrupalSpecSecret `json:"override"`
+	// Certificate which are automatically set .
+	Certificate DrupalSpecSecret `json:"certificate"`
 }
 
 // DrupalSpecSecret defines the spec for a specific secret.
@@ -232,8 +284,16 @@ type DrupalSpecExec struct {
 	ReadOnly bool `json:"readOnly"`
 	// Resource constraints which will be applied to the background task.
 	Resources corev1.ResourceRequirements `json:"resources"`
+	// Configuration which will be used to tune the CLI PHP session.
+	Configuration DrupalSpecExecConfiguration `json:"configuration"`
 	// How long for the command line environment to exist.
 	Timeout int `json:"timeout"`
+}
+
+// DrupalSpecExecConfiguration is used to configure PHP CLI session.
+type DrupalSpecExecConfiguration struct {
+	// Sets the environment variable PHP_MEMORY_LIMIT.
+	MemoryLimit int32 `json:"memoryLimit"`
 }
 
 // DrupalSpecNewRelic is used for configuring New Relic configuration.
@@ -264,11 +324,6 @@ type DrupalSpecSMTP struct {
 	From extensionsv1beta1.SMTPSpecFrom `json:"from"`
 }
 
-// DrupalSpecBackup configuration for recovery.
-type DrupalSpecBackup struct {
-	Schedule string `json:"schedule"`
-}
-
 // DrupalSpecPrometheus configures application metrics.
 type DrupalSpecPrometheus struct {
 	// Token which Prometheus uses to access https://www.drupal.org/project/prometheus_exporter
@@ -289,6 +344,8 @@ type DrupalStatus struct {
 	Volume DrupalStatusVolumes `json:"volume,omitempty"`
 	// MySQL status information.
 	MySQL map[string]DrupalStatusMySQL `json:"mysql,omitempty"`
+	// Solr status information.
+	Solr map[string]DrupalStatusSolr `json:"solr,omitempty"`
 	// Background task information eg. Last execution.
 	Cron map[string]DrupalStatusCron `json:"cron,omitempty"`
 	// Configuration status.
@@ -299,8 +356,6 @@ type DrupalStatus struct {
 	Exec DrupalStatusExec `json:"exec,omitempty"`
 	// SMTP service status.
 	SMTP DrupalStatusSMTP `json:"smtp,omitempty"`
-	// Backup status.
-	Backup DrupalStatusBackup `json:"backup,omitempty"`
 }
 
 // DrupalStatusLabels which are used for querying application components.
@@ -325,14 +380,14 @@ type DrupalStatusNginx struct {
 	Image string `json:"image,omitempty"`
 	// Current number of replicas.
 	Replicas int32 `json:"replicas,omitempty"`
-	// Application metrics.
-	Metrics DrupalStatusNginxMetrics `json:"metrics,omitempty"`
 }
 
-// DrupalStatusNginxMetrics identifies all nginx metric related status.
-type DrupalStatusNginxMetrics struct {
+// DrupalStatusNginxMetric identifies all Nginx metrics.
+type DrupalStatusNginxMetric struct {
 	// Current CPU metric for the Nginx deployment.
-	CPU int32 `json:"cpu,omitempty"`
+	CPU int32 `json:"cpu"`
+	// Current Memory metric for the Nginx deployment.
+	Memory int32 `json:"memory"`
 }
 
 // DrupalStatusFPM identifies all deployment related status.
@@ -345,14 +400,14 @@ type DrupalStatusFPM struct {
 	Image string `json:"image,omitempty"`
 	// Current number of replicas.
 	Replicas int32 `json:"replicas,omitempty"`
-	// Application metrics.
-	Metrics DrupalStatusFPMMetrics `json:"metrics,omitempty"`
 }
 
-// DrupalStatusFPMMetrics identifies all fpm metric related status.
-type DrupalStatusFPMMetrics struct {
+// DrupalStatusFPMMetric identifies all FPM metrics.
+type DrupalStatusFPMMetric struct {
 	// Current CPU metric for the PHP-FPM deployment.
-	CPU int32 `json:"cpu,omitempty"`
+	CPU int32 `json:"cpu"`
+	// Current Memory metric for the PHP-FPM deployment.
+	Memory int32 `json:"memory"`
 }
 
 // DrupalStatusVolumes identifies all volume related status.
@@ -415,6 +470,27 @@ type DrupalStatusMySQLSecretKeys struct {
 	Password string `json:"password,omitempty"`
 }
 
+// DrupalStatusSolr identifies all solr related status.
+type DrupalStatusSolr struct {
+	// Status of the application configuration.
+	ConfigMap DrupalStatusSolrConfigMap `json:"configmap,omitempty"`
+}
+
+// DrupalStatusSolrConfigMap identifies all Solr configmap related status.
+type DrupalStatusSolrConfigMap struct {
+	// Name of the configmap.
+	Name string `json:"name,omitempty"`
+	// Keys which can be used for discovery.
+	Keys DrupalStatusSolrConfigMapKeys `json:"keys,omitempty"`
+}
+
+// DrupalStatusSolrConfigMapKeys contains the ConfigMap keys required to connect to a Solr instance.
+type DrupalStatusSolrConfigMapKeys struct {
+	Host string `json:"host,omitempty"`
+	Port string `json:"port,omitempty"`
+	Core string `json:"core,omitempty"`
+}
+
 //DrupalStatusCron identifies all cron related status.
 type DrupalStatusCron struct {
 	// Last time a background task was executed.
@@ -423,6 +499,8 @@ type DrupalStatusCron struct {
 
 // DrupalStatusConfigMaps identifies all config map related status.
 type DrupalStatusConfigMaps struct {
+	// Status of the data exposed to the application.
+	Data DrupalStatusConfigMap `json:"data,omitempty"`
 	// Status of the generated configuration.
 	Default DrupalStatusConfigMap `json:"default,omitempty"`
 	// Status of the user provided configuration.
@@ -443,6 +521,8 @@ type DrupalStatusSecrets struct {
 	Default DrupalStatusSecret `json:"default,omitempty"`
 	// Status of the user provided secrets.
 	Override DrupalStatusSecret `json:"override,omitempty"`
+	// Status of the system provided certificates.
+	Certificate DrupalStatusSecret `json:"certificate,omitempty"`
 }
 
 // DrupalStatusSecret identifies specific secret related status.
@@ -462,12 +542,6 @@ type DrupalStatusExec struct {
 // DrupalStatusSMTP provides the status for the SMTP service.
 type DrupalStatusSMTP struct {
 	Verification extensionsv1beta1.SMTPStatusVerification `json:"verification,omitempty"`
-}
-
-// DrupalStatusBackup provides the status for the Backup.
-type DrupalStatusBackup struct {
-	Name             string       `json:"name,omitempty"`
-	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
 }
 
 // +genclient

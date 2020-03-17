@@ -24,7 +24,6 @@ import (
 
 	extensionsv1beta1 "github.com/skpr/operator/pkg/apis/extensions/v1beta1"
 	"github.com/skpr/operator/pkg/utils/aws/policy"
-	sesutils "github.com/skpr/operator/pkg/utils/aws/ses"
 	"github.com/skpr/operator/pkg/utils/controller/logger"
 	"github.com/skpr/operator/pkg/utils/slice"
 )
@@ -80,6 +79,7 @@ type ReconcileSMTP struct {
 type Params struct {
 	Prefix   string
 	Hostname string
+	Region   string
 	Port     int
 }
 
@@ -154,6 +154,7 @@ func (r *ReconcileSMTP) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	status := extensionsv1beta1.SMTPStatus{
 		Connection: extensionsv1beta1.SMTPStatusConnection{
+			Region:   r.params.Region,
 			Hostname: r.params.Hostname,
 			Port:     r.params.Port,
 		},
@@ -177,14 +178,8 @@ func (r *ReconcileSMTP) Reconcile(request reconcile.Request) (reconcile.Result, 
 			return reconcile.Result{}, errors.Wrap(err, "failed to create credentials")
 		}
 
-		smtpPassword, err := sesutils.PasswordFromSecretKey(password)
-		if err != nil {
-			log.Error(err)
-			return reconcile.Result{}, errors.Wrap(err, "failed to get password")
-		}
-
 		status.Connection.Username = username
-		status.Connection.Password = smtpPassword
+		status.Connection.Password = password
 	} else {
 		status.Connection.Username = smtp.Status.Connection.Username
 		status.Connection.Password = smtp.Status.Connection.Password
@@ -323,7 +318,7 @@ func (r *ReconcileSMTP) SyncPolicy(name, address string) error {
 
 // SyncEmailVerification to allow users to send email FROM an address.
 func (r *ReconcileSMTP) SyncEmailVerification(address string) (string, error) {
-	result, err := r.ses.GetIdentityVerificationAttributes(&ses.GetIdentityVerificationAttributesInput{
+	resp, err := r.ses.GetIdentityVerificationAttributes(&ses.GetIdentityVerificationAttributesInput{
 		Identities: []*string{
 			aws.String(address),
 		},
@@ -332,16 +327,21 @@ func (r *ReconcileSMTP) SyncEmailVerification(address string) (string, error) {
 		return "", errors.Wrap(err, "failed to list verification identities")
 	}
 
-	if val, ok := result.VerificationAttributes[address]; ok {
-		return *val.VerificationStatus, nil
+	status := getVerificationStatus(resp, address)
+
+	// We need to send a verification request if:
+	//   * We don't have one (first request and needs to be created)
+	//   * A verification has failed / timed out and needs to be requested.
+	if status == "" || status == ses.VerificationStatusFailed {
+		_, err = r.ses.VerifyEmailAddress(&ses.VerifyEmailAddressInput{
+			EmailAddress: aws.String(address),
+		})
+		if err != nil {
+			return "", errors.Wrap(err, "failed to submit verification request")
+		}
+
+		return r.SyncEmailVerification(address)
 	}
 
-	_, err = r.ses.VerifyEmailAddress(&ses.VerifyEmailAddressInput{
-		EmailAddress: aws.String(address),
-	})
-	if err != nil {
-		return "", errors.Wrap(err, "failed to submit verification request")
-	}
-
-	return r.SyncEmailVerification(address)
+	return status, nil
 }

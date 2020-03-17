@@ -13,6 +13,8 @@ import (
 	cmdbackup "github.com/skpr/operator/cmd/skpr-operator/backup"
 	"github.com/skpr/operator/cmd/skpr-operator/edge"
 	cmdmysql "github.com/skpr/operator/cmd/skpr-operator/mysql"
+	cmdrestore "github.com/skpr/operator/cmd/skpr-operator/restore"
+	cmdsearch "github.com/skpr/operator/cmd/skpr-operator/search"
 	cmdversion "github.com/skpr/operator/cmd/skpr-operator/version"
 )
 
@@ -38,9 +40,18 @@ func main() {
 
 	grpMySQL := app.Command("mysql", "Operators for MySQL operations")
 	cmdmysql.Shared(grpMySQL)
+	cmdmysql.Image(grpMySQL)
+	cmdmysql.ImageScheduled(grpMySQL)
 
 	grpBackup := app.Command("backup", "Operators for Backup tasks")
 	cmdbackup.Restic(grpBackup)
+	cmdbackup.Scheduled(grpBackup)
+
+	grpRestore := app.Command("restore", "Operators for Restore tasks")
+	cmdrestore.Restic(grpRestore)
+
+	grpSearch := app.Command("search", "Operators for search services")
+	cmdsearch.Solr(grpSearch)
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 }

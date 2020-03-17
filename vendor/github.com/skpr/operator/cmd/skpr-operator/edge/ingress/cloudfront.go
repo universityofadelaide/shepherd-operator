@@ -31,7 +31,21 @@ func (d *CloudFrontCommand) run(c *kingpin.ParseContext) error {
 func CloudFront(app *kingpin.CmdClause) {
 	c := &CloudFrontCommand{}
 	cmd := app.Command("cloudfront", "Start the CloudFront Ingress operator").Action(c.run)
-	cmd.Flag("origin-endpoint", "Endpoint of the origin to forward requests").Envar("SKPR_OPERATOR_EDGE_INGRESS_ORIGIN_ENDPOINT").Required().StringVar(&c.params.OriginEndpoint)
-	cmd.Flag("origin-policy", "Policy which will be used when connecting to the origin").Envar("SKPR_OPERATOR_EDGE_INGRESS_ORIGIN_POLICY").Default("https-only").StringVar(&c.params.OriginPolicy)
-	cmd.Flag("origin-timeout", "Policy which will be used when connecting to the origin").Envar("SKPR_OPERATOR_EDGE_INGRESS_ORIGIN_TIMEOUT").Default("60").Int64Var(&c.params.OriginTimeout)
+	cmd.Flag("origin-endpoint", "Endpoint of the origin to forward requests").
+		Envar("SKPR_OPERATOR_EDGE_INGRESS_ORIGIN_ENDPOINT").
+		Required().
+		StringVar(&c.params.OriginEndpoint)
+	cmd.Flag("origin-policy", "Policy which will be used when connecting to the origin").
+		Envar("SKPR_OPERATOR_EDGE_INGRESS_ORIGIN_POLICY").
+		Default("https-only").
+		StringVar(&c.params.OriginPolicy)
+	cmd.Flag("origin-timeout", "Policy which will be used when connecting to the origin").
+		Envar("SKPR_OPERATOR_EDGE_INGRESS_ORIGIN_TIMEOUT").
+		Default("60").
+		Int64Var(&c.params.OriginTimeout)
+
+	cmd.Flag("contour-timeout", "Timeout policy Contour will use for requests").
+		Envar("SKPR_OPERATOR_EDGE_INGRESS_CONTOUR_TIMEOUT").
+		Default("300s").
+		StringVar(&c.params.ContourTimeout)
 }

@@ -33,14 +33,46 @@ pods:
         value: password
     command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "mysql", "shared"]
 
+  database-image:
+    image: alpine:3.9
+    serviceAccount: admin
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "mysql", "image"]
+
+  database-image-scheduled:
+    image: alpine:3.9
+    serviceAccount: admin
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "mysql", "image-scheduled"]
+
   restic:
     image: alpine:3.9
     serviceAccount: admin
     env:
       - name: SKPR_BACKUP_RESTIC_BUCKET
-        value: s3:http://minio.minio:9000
+        value: s3:http://minio.minio.svc.cluster.local:9000
       - name: AWS_ACCESS_KEY_ID
-        value: minio
+        value: local
       - name: AWS_SECRET_ACCESS_KEY
-        value: minio123
+        value: password123
     command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "backup", "restic"]
+
+  backup-scheduled:
+    image: alpine:3.9
+    serviceAccount: admin
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "backup", "scheduled"]
+
+  restore:
+    image: alpine:3.9
+    serviceAccount: admin
+    env:
+      - name: SKPR_BACKUP_RESTIC_BUCKET
+        value: s3:http://minio.minio.svc.cluster.local:9000
+      - name: AWS_ACCESS_KEY_ID
+        value: local
+      - name: AWS_SECRET_ACCESS_KEY
+        value: password123
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "restore", "restic"]
+
+  solr:
+    image: alpine:3.9
+    serviceAccount: admin
+    command: ["/go/src/github.com/skpr/operator/bin/skpr-operator", "search", "solr"]

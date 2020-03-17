@@ -57,6 +57,9 @@ spec:
                   description: Port used when connecting to the SMTP server.
                   format: int64
                   type: integer
+                region:
+                  description: Region which the SMTP server resides.
+                  type: string
                 username:
                   description: Username used when connecting to the SMTP server.
                   type: string

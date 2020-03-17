@@ -4,6 +4,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// ConfigMapKeyFromAddress for loading from a mounted ConfigMap.
+	ConfigMapKeyFromAddress = "smtp.from.address"
+	// ConfigMapKeyHostname for loading from a mounted ConfigMap.
+	ConfigMapKeyHostname = "smtp.hostname"
+	// ConfigMapKeyPort for loading from a mounted ConfigMap.
+	ConfigMapKeyPort = "smtp.port"
+	// ConfigMapKeyUsername for loading from a mounted ConfigMap.
+	ConfigMapKeyUsername = "smtp.username"
+	// ConfigMapKeyRegion for loading from a mounted ConfigMap.
+	ConfigMapKeyRegion = "smtp.region"
+	// SecretKeyPassword for loading from a mounted Secret.
+	SecretKeyPassword = "smtp.password"
+)
+
 // SMTPSpec defines the desired state of SMTP
 type SMTPSpec struct {
 	// From defines what an application is allowed to send from.
@@ -34,6 +49,8 @@ type SMTPStatusVerification struct {
 type SMTPStatusConnection struct {
 	// Hostname used when connecting to the SMTP server.
 	Hostname string `json:"hostname,omitempty"`
+	// Region which the SMTP server resides.
+	Region string `json:"region,omitempty"`
 	// Port used when connecting to the SMTP server.
 	Port int `json:"port,omitempty"`
 	// Username used when connecting to the SMTP server.
