@@ -31,6 +31,7 @@ import (
 
 	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
+	shpmetav1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 )
 
 func TestReconcile(t *testing.T) {
@@ -45,7 +46,9 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		Spec: extensionv1.BackupScheduledSpec{
-			Schedule: "0 0 * * * *",
+			Schedule: shpmetav1.ScheduledSpec{
+				CronTab: "0 0 * * * *",
+			},
 		},
 	}
 
@@ -139,7 +142,9 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 			},
 		},
 		Spec: extensionv1.BackupScheduledSpec{
-			Schedule: "a b * * * * *",
+			Schedule: shpmetav1.ScheduledSpec{
+				CronTab: "a b * * * * *",
+			},
 		},
 	}
 
@@ -161,12 +166,12 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 }
 
 func TestGetScheduleComparison(t *testing.T) {
-	spec1 := extensionv1.BackupScheduledStatus{}
+	spec1 := shpmetav1.ScheduledStatus{}
 	now1 := time.Now()
 	assert.Equal(t, now1, getScheduleComparison(spec1, now1), "comparison time defaults to now when nil value")
 
 	d, _ := time.Parse(time.RFC3339, time.RFC3339)
-	spec2 := extensionv1.BackupScheduledStatus{
+	spec2 := shpmetav1.ScheduledStatus{
 		LastExecutedTime: &metav1.Time{Time: d},
 	}
 	now2 := time.Now()

@@ -3,10 +3,14 @@ kind: BackupScheduled
 metadata:
   name: node-123-backup-xyz
   labels:
-    site: 456
-    environment: 123
+    site: "456"
+    environment: "123"
 spec:
-  schedule: "0 2 * * * *"
+  schedule:
+    crontab: "32 11 * * *"
+    startingDeadlineSeconds: 86400
+    concurrencyPolicy: "Forbid"
+    suspend: false
   volumes:
     shared:
       claimName: node-123-shared
