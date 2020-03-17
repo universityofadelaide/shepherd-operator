@@ -31,7 +31,7 @@ const (
 	VolumeMySQL = "restic-mysql"
 )
 
-// PodSpecParams which are passed into the PodSpecBackup and PodSpecRestore functions.
+// PodSpecParams which are passed into the PodSpecBackup function.
 type PodSpecParams struct {
 	CPU         string
 	Memory      string
@@ -156,7 +156,8 @@ func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId stri
 			Env:        mysqlEnvVars(mysqlStatus),
 			WorkingDir: params.WorkingDir,
 			Command: []string{
-				"/bin/sh", "-c",
+				"bash",
+				"-c",
 			},
 			Args: []string{
 				fmt.Sprintf("database-backup > mysql/%s.sql", mysqlName),
