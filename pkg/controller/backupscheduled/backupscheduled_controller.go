@@ -134,6 +134,12 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	r.log.Info("Enforcing backup retention policies")
+	err = r.ExecuteRetentionPolicies(scheduled, backups)
+	if err != nil {
+		r.log.Error(err.Error())
+	}
+
 	r.log.Info("Filtering Backups")
 	active, successful, failed, err := r.SortBackups(scheduled, backups)
 	if err != nil {
@@ -317,6 +323,37 @@ func (r *ReconcileBackupScheduled) ScheduleNextBackup(scheduled *extensionv1.Bac
 	}
 
 	return result, nil
+}
+
+func (r *ReconcileBackupScheduled) ExecuteRetentionPolicies(scheduled *extensionv1.BackupScheduled, backups extensionv1.BackupList) error {
+	if scheduled.Spec.Retention.MaxNumber == nil {
+		r.log.Debugf("backup retention disabled - skipping")
+		return nil
+	}
+
+	sort.SliceStable(backups.Items, func(i, j int) bool {
+		// Sort by completed date first.
+		a := backups.Items[i].Status.CompletionTime
+		b := backups.Items[j].Status.CompletionTime
+		if a != nil && b != nil {
+			return a.After(b.Time)
+		}
+		// Default to alphabetical.
+		return backups.Items[i].Name > backups.Items[j].Name
+	})
+
+	remaining := *scheduled.Spec.Retention.MaxNumber
+	for _, item := range backups.Items {
+		if remaining > 0 {
+			r.log.Debugf("keeping backup %s", item.Name)
+			remaining--
+			continue
+		}
+
+		r.log.Infof("deleting backup %s", item.Name)
+		// @todo delete backup.
+	}
+	return nil
 }
 
 func buildBackup(scheduled *extensionv1.BackupScheduled, scheme *runtime.Scheme, scheduledTime time.Time) (*extensionv1.Backup, error) {
