@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -90,6 +91,7 @@ type ReconcileBackupScheduled struct {
 	client.Client
 	recorder record.EventRecorder
 	scheme   *runtime.Scheme
+	log      log.Logger
 }
 
 // Reconcile reads that state of the cluster for a BackupScheduled object and makes changes based on the state read
@@ -101,8 +103,9 @@ type ReconcileBackupScheduled struct {
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backupscheduleds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backupscheduleds/finalizers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	log := logger.New(ControllerName, request.Namespace, request.Name)
-	log.Info("Starting reconcile loop")
+	r.log = logger.New(ControllerName, request.Namespace, request.Name)
+	r.log.SetLevel("debug")
+	r.log.Info("Starting reconcile loop")
 
 	scheduled := &extensionv1.BackupScheduled{}
 	err := r.Get(context.TODO(), request.NamespacedName, scheduled)
@@ -112,17 +115,17 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 
 	if scheduled.Spec.Schedule.CronTab == "" {
 		err := errors.New("BackupScheduled doesn't have a schedule.")
-		log.Error(err.Error())
+		r.log.Error(err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if _, found := scheduled.ObjectMeta.GetLabels()["site"]; !found {
 		err := errors.New("BackupScheduled doesn't have a site label.")
-		log.Error(err.Error())
+		r.log.Error(err.Error())
 		return reconcile.Result{}, err
 	}
 
-	log.Info("Querying Backups")
+	r.log.Info("Querying Backups")
 	var backups extensionv1.BackupList
 	listOptions := client.MatchingField(OwnerKey, request.Name)
 	listOptions.Namespace = request.Namespace
@@ -131,27 +134,27 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	log.Info("Filtering Backups")
+	r.log.Info("Filtering Backups")
 	active, successful, failed, err := r.SortBackups(scheduled, backups)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	log.Infof("Job count: active=%d success=%d failed=%d", len(active), len(successful), len(failed))
+	r.log.Infof("Job count: active=%d success=%d failed=%d", len(active), len(successful), len(failed))
 
 	err = r.Status().Update(context.TODO(), scheduled)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	log.Info("Cleaning up old Backups")
+	r.log.Info("Cleaning up old Backups")
 	err = r.Cleanup(scheduled, successful, failed)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	if scheduled.Spec.Schedule.Suspend != nil && *scheduled.Spec.Schedule.Suspend {
-		log.Info("Scheduling has been suspended. Skipping.")
+		r.log.Info("Scheduling has been suspended. Skipping.")
 		return reconcile.Result{}, nil
 	}
 
