@@ -33,6 +33,16 @@ spec:
             mysql:
               description: MySQL databases which will be backed up.
               type: object
+            retention:
+              description: Retention defines how backup retention behavior.
+              properties:
+                maxNumber:
+                  description: MaxNumber is the maximum number of backups to retain.
+                  format: int64
+                  type: integer
+              required:
+              - maxNumber
+              type: object
             schedule:
               description: Schedule is the crontab statement which defines how often
                 a backup should run.
@@ -75,6 +85,7 @@ spec:
               description: Volumes which will be backed up.
               type: object
           required:
+          - retention
           - schedule
           type: object
         status:

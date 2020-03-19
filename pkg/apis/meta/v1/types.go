@@ -74,6 +74,16 @@ const ScheduledAnnotation = "skpr.io/scheduled-at"
 // +genclient
 // +k8s:deepcopy-gen=true
 
+// RetentionSpec defines the desired behavior or backup retention.
+type RetentionSpec struct {
+	// MaxNumber is the maximum number of backups to retain.
+	// +optional
+	MaxNumber *int `json:"maxNumber"`
+}
+
+// +genclient
+// +k8s:deepcopy-gen=true
+
 // ScheduledSpec defines the desired state of a scheduled task.
 type ScheduledSpec struct {
 	// The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
