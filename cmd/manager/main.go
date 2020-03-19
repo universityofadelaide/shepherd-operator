@@ -35,10 +35,11 @@ import (
 var (
 	metricsAddr    = kingpin.Flag("metrics-addr", "The address the metric endpoint binds to.").Default(":8080").String()
 	watchNamespace = kingpin.Flag("watch-namespace", "The namespace in which objects will be watched.").Envar("WATCH_NAMESPACE").String()
+	debug          = kingpin.Flag("debug", "Enable debug logging mode.").Default("true").Bool()
 )
 
 func main() {
-	logf.SetLogger(logf.ZapLogger(false))
+	logf.SetLogger(logf.ZapLogger(*debug))
 	log := logf.Log.WithName("entrypoint")
 
 	kingpin.Parse()
