@@ -5,8 +5,8 @@ package mock
 import (
 	"testing"
 
-	"github.com/universityofadelaide/shepherd-operator/pkg/utils/slice"
 	"github.com/stretchr/testify/assert"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/slice"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

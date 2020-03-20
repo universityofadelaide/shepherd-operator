@@ -23,9 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/controller/logger"
-	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
 	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
 )
