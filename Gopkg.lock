@@ -478,27 +478,6 @@
   version = "v1.4.2"
 
 [[projects]]
-  digest = "1:41dead4f4311f74f5ed531e4e9b794d6905cc13ceb039fccf935a8662b83fa3c"
-  name = "github.com/skpr/operator"
-  packages = [
-    "pkg/apis",
-    "pkg/apis/app/v1beta1",
-    "pkg/apis/aws/v1beta1",
-    "pkg/apis/edge/v1beta1",
-    "pkg/apis/extensions/v1beta1",
-    "pkg/apis/meta/v1",
-    "pkg/apis/mysql/v1beta1",
-    "pkg/apis/search/v1beta1",
-    "pkg/mysql",
-    "pkg/utils/controller/logger",
-    "pkg/utils/k8s/deployment",
-    "pkg/utils/slice",
-  ]
-  pruneopts = "T"
-  revision = "38133f6a76ec4940cfc74272586a6ed1c9fb4b54"
-  version = "v0.4.2"
-
-[[projects]]
   digest = "1:dee0cc3252ce6fcc3334c9529abd32925f2aaf072c90336a5a38254953564aa5"
   name = "github.com/spf13/afero"
   packages = [
@@ -1076,25 +1055,12 @@
     "github.com/prometheus/common/log",
     "github.com/robfig/cron",
     "github.com/rs/xid",
-    "github.com/skpr/operator/pkg/apis",
-    "github.com/skpr/operator/pkg/apis/app/v1beta1",
-    "github.com/skpr/operator/pkg/apis/aws/v1beta1",
-    "github.com/skpr/operator/pkg/apis/extensions/v1beta1",
-    "github.com/skpr/operator/pkg/apis/meta/v1",
-    "github.com/skpr/operator/pkg/apis/mysql/v1beta1",
-    "github.com/skpr/operator/pkg/apis/search/v1beta1",
-    "github.com/skpr/operator/pkg/mysql",
-    "github.com/skpr/operator/pkg/utils/controller/logger",
-    "github.com/skpr/operator/pkg/utils/slice",
     "github.com/stretchr/testify/assert",
     "golang.org/x/net/context",
     "gopkg.in/alecthomas/kingpin.v2",
     "k8s.io/api/apps/v1",
-    "k8s.io/api/autoscaling/v2beta2",
     "k8s.io/api/batch/v1",
-    "k8s.io/api/batch/v1beta1",
     "k8s.io/api/core/v1",
-    "k8s.io/api/extensions/v1beta1",
     "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/api/resource",
@@ -1103,7 +1069,6 @@
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/types",
-    "k8s.io/apimachinery/pkg/util/intstr",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/plugin/pkg/client/auth/gcp",

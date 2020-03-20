@@ -7,6 +7,7 @@ import (
 	"k8s.io/client-go/rest"
 	"time"
 
+	"github.com/go-test/deep"
 	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
 	errorspkg "github.com/pkg/errors"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
@@ -23,8 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/go-test/deep"
-	"github.com/skpr/operator/pkg/utils/controller/logger"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/controller/logger"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
 	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"

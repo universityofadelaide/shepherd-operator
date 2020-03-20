@@ -1,2 +1,0 @@
-# Don't display kubebuilder generated code in PR diffs.
-zz_generated.deepcopy.go linguist-generated

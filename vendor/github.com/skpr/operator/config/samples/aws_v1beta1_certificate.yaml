@@ -1,8 +1,0 @@
-apiVersion: aws.skpr.io/v1beta1
-kind: Certificate
-metadata:
-  name: sample
-spec:
-  commonName: example.com
-  alternateNames:
-    - www.example.com
