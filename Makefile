@@ -1,6 +1,7 @@
 
 # Image URL to use all building/pushing image targets
 IMG ?= docker.io/uofa/shepherd-operator:latest
+IMG_BUILDER ?= uofa/shepherd-operator:builder-latest
 NAMESPACE ?= myproject
 SERVICE_ACCOUNT=shepherd
 
@@ -8,12 +9,6 @@ SERVICE_ACCOUNT=shepherd
 export GO111MODULE=off
 
 all: test manager
-
-preflight:
-	# Ensure kubebuilder 1.x is in use.
-	kubebuilder version | grep 'KubeBuilderVersion:"1'
-	# Ensure kustomzie 1.x is in use.
-	kustomize version | grep 'KustomizeVersion:1'
 
 # Run tests
 test: generate fmt vet manifests
@@ -35,7 +30,10 @@ install: manifests
 kustomize:
 	@echo "updating kustomize namespace to ${NAMESPACE}"
 	sed -i'' -e 's@namespace: .*@namespace: '"${NAMESPACE}"'@' ./config/default/kustomization.yaml
-	kustomize build config/default -o ./config/deploy.yaml
+	docker run --rm -it \
+	    -v $(CURDIR):/go/src/github.com/universityofadelaide/shepherd-operator \
+	    --workdir /go/src/github.com/universityofadelaide/shepherd-operator \
+	    ${IMG_BUILDER} kustomize build config/default -o ./config/deploy.yaml
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests install kustomize
@@ -55,7 +53,7 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate: preflight
+generate:
 ifndef GOPATH
 	$(error GOPATH not defined, please define GOPATH. Run "go help gopath" to learn more about GOPATH)
 endif
@@ -66,9 +64,9 @@ docker-build: test
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
+	docker build -t ${IMG_BUILDER} -f Dockerfile.builder .
 
 # Push the docker image
 docker-push:
 	docker push ${IMG}
-
-.PHONY: preflight
+	docker push ${IMG_BUILDER}

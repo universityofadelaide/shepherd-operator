@@ -1,3 +1,5 @@
+// +build unit
+
 package restic
 
 import (
@@ -10,7 +12,7 @@ import (
 
 	osv1 "github.com/openshift/api/apps/v1"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
-	metav1_shepherd "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
+	shpmetav1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 )
 
 func TestPodSpecBackup(t *testing.T) {
@@ -28,16 +30,16 @@ func TestPodSpecBackup(t *testing.T) {
 			Namespace: "test-namespace",
 		},
 		Spec: extensionv1.BackupSpec{
-			Volumes: map[string]metav1_shepherd.SpecVolume{
+			Volumes: map[string]shpmetav1.SpecVolume{
 				"volume1": {
 					ClaimName: "claim-volume1",
 				},
 			},
-			MySQL: map[string]metav1_shepherd.SpecMySQL{
+			MySQL: map[string]shpmetav1.SpecMySQL{
 				"mysql1": {
-					Secret: metav1_shepherd.SpecMySQLSecret{
+					Secret: shpmetav1.SpecMySQLSecret{
 						Name: "secret1",
-						Keys: metav1_shepherd.SpecMySQLSecretKeys{
+						Keys: shpmetav1.SpecMySQLSecretKeys{
 							Username: "mysql-user",
 							Password: "mysql-pass",
 							Database: "mysql-db",
@@ -274,16 +276,16 @@ func TestPodSpecRestore(t *testing.T) {
 		},
 		Spec: extensionv1.RestoreSpec{
 			BackupName: "test-backup",
-			Volumes: map[string]metav1_shepherd.SpecVolume{
+			Volumes: map[string]shpmetav1.SpecVolume{
 				"volume1": {
 					ClaimName: "claim-volume1",
 				},
 			},
-			MySQL: map[string]metav1_shepherd.SpecMySQL{
+			MySQL: map[string]shpmetav1.SpecMySQL{
 				"mysql1": {
-					Secret: metav1_shepherd.SpecMySQLSecret{
+					Secret: shpmetav1.SpecMySQLSecret{
 						Name: "secret1",
-						Keys: metav1_shepherd.SpecMySQLSecretKeys{
+						Keys: shpmetav1.SpecMySQLSecretKeys{
 							Username: "mysql-user",
 							Password: "mysql-pass",
 							Database: "mysql-db",
