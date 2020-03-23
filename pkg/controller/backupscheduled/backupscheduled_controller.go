@@ -158,14 +158,6 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 	return r.ScheduleNextBackup(scheduled, active)
 }
 
-func getScheduleComparison(s shpmetav1.ScheduledStatus, now time.Time) time.Time {
-	if s.LastExecutedTime != nil {
-		return s.LastExecutedTime.Time
-	}
-
-	return now
-}
-
 // SortBackups into active, successful, failed.
 func (r *ReconcileBackupScheduled) SortBackups(scheduled *extensionv1.BackupScheduled, backups extensionv1.BackupList) ([]*extensionv1.Backup, []*extensionv1.Backup, []*extensionv1.Backup, error) {
 	var (

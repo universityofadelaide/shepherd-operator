@@ -18,9 +18,6 @@ package backupscheduled
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"testing"
 
 	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
@@ -163,17 +161,4 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 		NamespacedName: query,
 	})
 	assert.Contains(t, err.Error(), "syntax error in ")
-}
-
-func TestGetScheduleComparison(t *testing.T) {
-	spec1 := shpmetav1.ScheduledStatus{}
-	now1 := time.Now()
-	assert.Equal(t, now1, getScheduleComparison(spec1, now1), "comparison time defaults to now when nil value")
-
-	d, _ := time.Parse(time.RFC3339, time.RFC3339)
-	spec2 := shpmetav1.ScheduledStatus{
-		LastExecutedTime: &metav1.Time{Time: d},
-	}
-	now2 := time.Now()
-	assert.Equal(t, d, getScheduleComparison(spec2, now2), "comparison time defaults to last executed time")
 }
