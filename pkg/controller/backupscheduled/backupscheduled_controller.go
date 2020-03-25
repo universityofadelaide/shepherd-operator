@@ -326,7 +326,7 @@ func (r *ReconcileBackupScheduled) ScheduleNextBackup(scheduled *extensionv1.Bac
 }
 
 func (r *ReconcileBackupScheduled) ExecuteRetentionPolicies(scheduled *extensionv1.BackupScheduled, backups extensionv1.BackupList) error {
-	if scheduled.Spec.Retention.MaxNumber == nil {
+	if scheduled.Spec.Retention.MaxNumber == nil || *scheduled.Spec.Retention.MaxNumber < 1 {
 		r.log.Debugf("backup retention disabled - skipping")
 		return nil
 	}
