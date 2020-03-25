@@ -350,8 +350,10 @@ func (r *ReconcileBackupScheduled) ExecuteRetentionPolicies(scheduled *extension
 			continue
 		}
 
-		r.log.Infof("deleting backup %s", item.Name)
-		// @todo delete backup.
+		r.recorder.Eventf(scheduled, corev1.EventTypeNormal, events.EventCreate, "Deleting Backup: %s", item.ObjectMeta.Name)
+		if err := r.Delete(context.Background(), &item); err != nil {
+			return errors.Wrap(err, "failed to delete Backup")
+		}
 	}
 	return nil
 }
