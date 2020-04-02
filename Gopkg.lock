@@ -341,7 +341,10 @@
 [[projects]]
   digest = "1:a61aad1f69d9b342e724828664ad94dcddd7a3f33a6d860940beb14c0d1603bc"
   name = "github.com/openshift/api"
-  packages = ["apps/v1"]
+  packages = [
+    "apps/v1",
+    "route/v1",
+  ]
   pruneopts = "T"
   revision = "0d921e363e951d89f583292c60d013c318df64dc"
   version = "v3.9.0"
@@ -352,6 +355,8 @@
   packages = [
     "apps/clientset/versioned/scheme",
     "apps/clientset/versioned/typed/apps/v1",
+    "route/clientset/versioned/scheme",
+    "route/clientset/versioned/typed/route/v1",
   ]
   pruneopts = "T"
   revision = "1fa528d3be060e4c7178eb69e76d37cf7e699e3c"
@@ -1050,7 +1055,9 @@
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "github.com/openshift/api/apps/v1",
+    "github.com/openshift/api/route/v1",
     "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1",
+    "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1",
     "github.com/pkg/errors",
     "github.com/prometheus/common/log",
     "github.com/robfig/cron",
@@ -1073,8 +1080,6 @@
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/plugin/pkg/client/auth/gcp",
     "k8s.io/client-go/rest",
-    "k8s.io/client-go/tools/record",
-    "k8s.io/client-go/tools/reference",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
     "sigs.k8s.io/controller-runtime/pkg/client",
