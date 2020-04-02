@@ -181,14 +181,6 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:908268db0726d942d20f7dd6bd4a85d41daf6bf7a9ca027cf85a495c2c547bbf"
-  name = "github.com/gorhill/cronexpr"
-  packages = ["."]
-  pruneopts = "T"
-  revision = "a557574d6c024ed6e36acc8b610f5f211c91568a"
-  version = "1.0.0"
-
-[[projects]]
   branch = "master"
   digest = "1:3fd71568acc0a8122ddfda5873fb47ce0f40da6788a6d8872f4cc20ff7e8f502"
   name = "github.com/gregjones/httpcache"
@@ -455,6 +447,14 @@
   version = "v0.0.3"
 
 [[projects]]
+  digest = "1:32db15a47b5be06a5d40e863ab0ebed107741845fd2d8676121f788284d26923"
+  name = "github.com/robfig/cron"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "ccba498c397bb90a9c84945bbb0f7af2d72b6309"
+  version = "v3.0.1"
+
+[[projects]]
   digest = "1:5e2ebcff4614ac5a6d9abbbaaa6df76082658d797621f2a25e54c5e5e4203161"
   name = "github.com/rogpeppe/go-internal"
   packages = [
@@ -481,14 +481,6 @@
   pruneopts = "T"
   revision = "839c75faf7f98a33d445d181f3018b5c3409a45e"
   version = "v1.4.2"
-
-[[projects]]
-  digest = "1:f92da7774c21ec4ff4956acc0ae6a4cc2c6738e6bd9c1fb35218f2de64c2a092"
-  name = "github.com/skpr/operator"
-  packages = ["pkg/utils/controller/logger"]
-  pruneopts = "T"
-  revision = "d3f7085ad01287df8e6e6405b132cf354450e7f7"
-  version = "v0.3.2"
 
 [[projects]]
   digest = "1:dee0cc3252ce6fcc3334c9529abd32925f2aaf072c90336a5a38254953564aa5"
@@ -1060,7 +1052,6 @@
   input-imports = [
     "github.com/emicklei/go-restful",
     "github.com/go-test/deep",
-    "github.com/gorhill/cronexpr",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "github.com/openshift/api/apps/v1",
@@ -1068,7 +1059,9 @@
     "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1",
     "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1",
     "github.com/pkg/errors",
-    "github.com/skpr/operator/pkg/utils/controller/logger",
+    "github.com/prometheus/common/log",
+    "github.com/robfig/cron",
+    "github.com/rs/xid",
     "github.com/stretchr/testify/assert",
     "golang.org/x/net/context",
     "gopkg.in/alecthomas/kingpin.v2",
@@ -1087,7 +1080,6 @@
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/plugin/pkg/client/auth/gcp",
     "k8s.io/client-go/rest",
-    "k8s.io/client-go/tools/clientcmd",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
     "sigs.k8s.io/controller-runtime/pkg/client",

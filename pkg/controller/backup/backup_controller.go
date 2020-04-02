@@ -3,11 +3,9 @@ package backup
 import (
 	"context"
 	"fmt"
-
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
-	"github.com/skpr/operator/pkg/utils/controller/logger"
-	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
+
 	"io/ioutil"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
+	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/controller/logger"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
 	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
 )
@@ -118,7 +118,7 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 		CPU:         "100m",
 		Memory:      "512Mi",
 		ResticImage: "docker.io/restic/restic:0.9.5",
-		MySQLImage:  "previousnext/mysql",
+		MySQLImage:  "skpr/mtk-mysql",
 		WorkingDir:  "/home/shepherd",
 		Tags:        []string{},
 	}

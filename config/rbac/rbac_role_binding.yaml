@@ -10,4 +10,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: shepherd
-  namespace: shepherd-dev
+  namespace: myproject

@@ -1,7 +1,7 @@
 package restic
 
-// Prefix for discoverying Restic resources.
-const Prefix = "backup-restic"
+// Prefix for discovering Restic resources.
+const Prefix = "restic"
 
 // VolumeSecrets identifier used for Restic secret.
 const VolumeSecrets = "restic-secrets"

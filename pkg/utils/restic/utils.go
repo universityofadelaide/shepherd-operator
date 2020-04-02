@@ -17,7 +17,7 @@ func formatTags(tags []string) string {
 	return strings.Trim(line, " ")
 }
 
-// Helper function for parsing the snapshot id from restic backup output.
+// ParseSnapshotID parses the restic snapshot id from a string.
 func ParseSnapshotID(input string) string {
 	// Restic IDs are SHA-256 hashes and the output contains the 8 character short version.
 	var r = regexp.MustCompile(`snapshot\s([A-Fa-f0-9]{8})\ssaved`)
