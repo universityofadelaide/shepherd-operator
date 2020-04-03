@@ -18,6 +18,8 @@ package backupscheduled
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -178,4 +180,65 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 		NamespacedName: query,
 	})
 	assert.Contains(t, err.Error(), "expected exactly 5 fields, found 7")
+}
+
+func TestReconcileRetention(t *testing.T) {
+	apis.AddToScheme(scheme.Scheme)
+
+	retentionMaxNumber := 3
+	startDeadline := int64(60)
+	instance := &extensionv1.BackupScheduled{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: corev1.NamespaceDefault,
+			Labels: map[string]string{
+				"site": "foo",
+			},
+		},
+		Spec: extensionv1.BackupScheduledSpec{
+			Retention: shpmetav1.RetentionSpec{
+				MaxNumber: &retentionMaxNumber,
+			},
+			Schedule: shpmetav1.ScheduledSpec{
+				CronTab:                 "* * * * *",
+				StartingDeadlineSeconds: &startDeadline,
+			},
+		},
+	}
+
+	// Query which will be used to find our BackupScheduled object.
+	query := types.NamespacedName{
+		Name:      instance.ObjectMeta.Name,
+		Namespace: instance.ObjectMeta.Namespace,
+	}
+
+	recorder := &events.Mock{}
+	rd := &ReconcileBackupScheduled{
+		Client:   fake.NewFakeClient(instance),
+		scheme:   scheme.Scheme,
+		recorder: recorder,
+	}
+
+	// increment the minute on each loop to trigger a new backup.
+	iterations := 9
+	for i := 0; i <= iterations; i++ {
+		c, err := clock.New(fmt.Sprintf("2020-04-02T00:0%d:30Z", i))
+		assert.Nil(t, err)
+		rd.Clock = c
+
+		_, err = rd.Reconcile(reconcile.Request{
+			NamespacedName: query,
+		})
+		assert.Nil(t, err)
+	}
+
+	expectedCleanups := iterations - retentionMaxNumber
+	actualCleanups := 0
+	e := recorder.List()
+	for _, event := range e {
+		if strings.Contains(event, "Deleting Backup") {
+			actualCleanups++
+		}
+	}
+	assert.Equal(t, expectedCleanups, actualCleanups, "expected to clean up %d but got %d", expectedCleanups, actualCleanups)
 }
