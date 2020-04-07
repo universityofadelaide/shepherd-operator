@@ -190,6 +190,10 @@ func (r *ReconcileBackup) SyncJob(log log.Logger, backup *extensionv1.Backup) (r
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
 			Namespace: backup.ObjectMeta.Namespace,
+			Labels: map[string]string{
+				"app":          "restic",
+				"resticAction": "backup",
+			},
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:           &parallelism,
@@ -286,6 +290,10 @@ func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-delete-%s", resticutils.Prefix, backup.Name),
 			Namespace: backup.ObjectMeta.Namespace,
+			Labels: map[string]string{
+				"app":          "restic",
+				"resticAction": "delete",
+			},
 		},
 		Spec: batchv1.JobSpec{
 			// @todo uncomment this when the feature becomes available (requires kube v1.12+).
