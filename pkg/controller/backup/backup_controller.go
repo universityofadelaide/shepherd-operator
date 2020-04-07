@@ -266,8 +266,8 @@ func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error
 
 	spec, err := resticutils.PodSpecDelete(
 		backup.Status.ResticID,
-		backup.ObjectMeta.GetLabels()["site"],
 		backup.ObjectMeta.Namespace,
+		backup.ObjectMeta.GetLabels()["site"],
 		params,
 	)
 	if err != nil {
