@@ -5,4 +5,4 @@ go:
 env:
   - GO111MODULE=off
 
-script: make test
+script: make ci
