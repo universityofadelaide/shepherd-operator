@@ -3,11 +3,11 @@ package backup
 import (
 	"context"
 	"fmt"
-	"github.com/go-test/deep"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"time"
 
+	"github.com/go-test/deep"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/log"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -123,17 +123,44 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 		// The object is being deleted, ensure that the finalizer exists then
 		// create a job to delete the restic snapshot.
 		if slice.Contains(backup.ObjectMeta.Finalizers, Finalizer) {
-			log.Info("forgetting the restic snapshot")
-
-			err := r.DeleteResticSnapshot(backup)
+			// Check status of restic-delete job.
+			newJob := &batchv1.Job{}
+			nsn := types.NamespacedName{
+				Namespace: backup.Namespace,
+				Name:      fmt.Sprintf("%s-delete-%s", resticutils.Prefix, backup.Name),
+			}
+			err := r.Get(context.TODO(), nsn, newJob)
 			if err != nil {
-				return reconcile.Result{}, err
+				if !kerrors.IsNotFound(err) {
+					return reconcile.Result{Requeue: true}, err
+				}
+
+				// Job doesnt exist, create it.
+				log.Info("forgetting the restic snapshot")
+				err := r.DeleteResticSnapshot(backup)
+				return reconcile.Result{RequeueAfter: 5 * time.Second}, err
 			}
 
-			// Remove this finalizer from the list and update it.
-			backup.ObjectMeta.Finalizers = slice.Remove(backup.ObjectMeta.Finalizers, Finalizer)
-			if err := r.Update(context.Background(), backup); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+			removeFinalizer := false
+			for _, condition := range newJob.Status.Conditions {
+				if condition.Type == batchv1.JobComplete {
+					log.Info("restic forget job complete")
+					removeFinalizer = true
+				} else if condition.Type == batchv1.JobFailed {
+					log.Error("restic forget job failed")
+					removeFinalizer = true
+				}
+			}
+			if removeFinalizer {
+				log.Infof("removing finalizer %s", Finalizer)
+
+				// Remove this finalizer from the list and update it.
+				backup.ObjectMeta.Finalizers = slice.Remove(backup.ObjectMeta.Finalizers, Finalizer)
+				err := r.Update(context.Background(), backup)
+				return reconcile.Result{}, err
+			} else {
+				log.Info("doing another loop")
+				return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 			}
 		}
 
@@ -308,42 +335,10 @@ func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error
 		},
 	}
 
-	err = r.Create(context.TODO(), job)
-	if err != nil {
-		return err
-	}
+	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, job, func(obj runtime.Object) error {
+		return nil
+	})
 
-	maxErrors := 5
-	i := 0
-	for {
-		newJob := &batchv1.Job{}
-		nsn := types.NamespacedName{
-			Namespace: job.Namespace,
-			Name:      job.Name,
-		}
-		err := r.Get(context.TODO(), nsn, newJob)
-		if err != nil {
-			i++
-			if maxErrors <= i {
-				return errors.Wrap(err, "too many failures loading restic delete job")
-			}
-		}
-
-		if newJob.Status.Active == 0 {
-			if newJob.Status.Succeeded > 0 {
-				log.Info("restic forget job complete")
-				break
-			}
-			if newJob.Status.Failed > 0 {
-				log.Info("restic forget job failed")
-				break
-			}
-		}
-
-		time.Sleep(5 * time.Second)
-	}
-
-	_, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, job, sync.Job(job, r.scheme))
 	return err
 }
 
