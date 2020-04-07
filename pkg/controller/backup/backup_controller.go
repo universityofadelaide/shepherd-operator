@@ -279,6 +279,7 @@ func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error
 		completions    int32 = 1
 		activeDeadline int64 = 3600
 		backOffLimit   int32 = 2
+		//ttl            int32 = 3600
 	)
 
 	job := &batchv1.Job{
@@ -287,6 +288,8 @@ func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error
 			Namespace: backup.ObjectMeta.Namespace,
 		},
 		Spec: batchv1.JobSpec{
+			// @todo uncomment this when the feature becomes available (requires kube v1.12+).
+			// ttlSecondsAfterFinished: &ttl,
 			Parallelism:           &parallelism,
 			Completions:           &completions,
 			ActiveDeadlineSeconds: &activeDeadline,
