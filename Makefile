@@ -16,7 +16,10 @@ test: generate fmt vet manifests
 
 ci: ci-test ci-lint
 ci-test:
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+	go test \
+	    ./cmd/... \
+	    ./pkg/controller/... \
+	    ./pkg/utils/...
 
 ci-lint: fmt
 	git diff --exit-code
