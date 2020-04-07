@@ -8,6 +8,8 @@ import (
 
 // BackupScheduledSpec defines the desired state of BackupScheduled
 type BackupScheduledSpec struct {
+	// Retention defines how backup retention behavior.
+	Retention shpmetav1.RetentionSpec `json:"retention"`
 	// Schedule is the crontab statement which defines how often a backup should run.
 	Schedule shpmetav1.ScheduledSpec `json:"schedule"`
 	// Volumes which will be backed up.

@@ -6,6 +6,9 @@ metadata:
     site: "456"
     environment: "123"
 spec:
+  retention:
+    # Maximum number of backups to retain.
+    maxNumber: 7
   schedule:
     crontab: "32 11 * * *"
     startingDeadlineSeconds: 86400

@@ -23,9 +23,12 @@ import (
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	shpv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 )
 
 func TestStorageBackupScheduled(t *testing.T) {
+	n := 1
 	key := types.NamespacedName{
 		Name:      "foo",
 		Namespace: "default",
@@ -34,7 +37,16 @@ func TestStorageBackupScheduled(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: "default",
-		}}
+		},
+		Spec: BackupScheduledSpec{
+			Retention: shpv1.RetentionSpec{
+				MaxNumber: &n,
+			},
+			Schedule: shpv1.ScheduledSpec{
+				CronTab: "1 * * * *",
+			},
+		},
+	}
 	g := gomega.NewGomegaWithT(t)
 
 	// Test Create
