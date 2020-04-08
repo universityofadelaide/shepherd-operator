@@ -1,5 +1,3 @@
-// +build unit
-
 package slice
 
 import (
@@ -14,17 +12,17 @@ func TestContains(t *testing.T) {
 	assert.False(t, Contains(list, "baz"))
 }
 
+func TestRemove(t *testing.T) {
+	list := []string{"foo", "bar"}
+	list = Remove(list, "foo")
+	assert.Equal(t, []string{"bar"}, list)
+}
+
 func TestEqual(t *testing.T) {
 	assert.True(t, Equal([]string{"foo", "bar"}, []string{"foo", "bar"}))
 	assert.True(t, Equal([]string{"foo", "bar"}, []string{"bar", "foo"}))
 	assert.False(t, Equal([]string{"foo"}, []string{"foo", "bar"}))
 	assert.False(t, Equal([]string{"foo", "bar"}, []string{"foo"}))
-}
-
-func TestRemove(t *testing.T) {
-	list := []string{"foo", "bar"}
-	list = Remove(list, "foo")
-	assert.Equal(t, []string{"bar"}, list)
 }
 
 func TestAppendSlice(t *testing.T) {

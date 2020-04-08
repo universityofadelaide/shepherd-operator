@@ -14,6 +14,16 @@ all: test manager
 test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
+ci: ci-test ci-lint
+ci-test:
+	go test \
+	    ./cmd/... \
+	    ./pkg/controller/... \
+	    ./pkg/utils/...
+
+ci-lint: fmt
+	git diff --exit-code
+
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager github.com/universityofadelaide/shepherd-operator/cmd/manager

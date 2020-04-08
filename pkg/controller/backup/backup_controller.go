@@ -3,16 +3,19 @@ package backup
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"time"
+
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
-
-	"io/ioutil"
+	"github.com/prometheus/common/log"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,10 +31,12 @@ import (
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/controller/logger"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
 	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/slice"
 )
 
 // ControllerName used for identifying which controller is performing an operation.
 const ControllerName = "backup-restic-controller"
+const Finalizer = "backups.finalizers.shepherd"
 
 // Add creates a new Backup Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -100,10 +105,84 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 		if kerrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
-
 		return reconcile.Result{}, err
 	}
 
+	if backup.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, if it does not have this finalizer,
+		// add it and update the object.
+		if !slice.Contains(backup.ObjectMeta.Finalizers, Finalizer) {
+			log.Info("Adding finalizer")
+
+			backup.ObjectMeta.Finalizers = append(backup.ObjectMeta.Finalizers, Finalizer)
+			if err := r.Update(context.Background(), backup); err != nil {
+				return reconcile.Result{Requeue: true}, nil
+			}
+		}
+	} else {
+		// The object is being deleted, ensure that the finalizer exists then
+		// create a job to delete the restic snapshot.
+		if slice.Contains(backup.ObjectMeta.Finalizers, Finalizer) {
+			// Check status of restic-delete job.
+			newJob := &batchv1.Job{}
+			nsn := types.NamespacedName{
+				Namespace: backup.Namespace,
+				Name:      fmt.Sprintf("%s-delete-%s", resticutils.Prefix, backup.Name),
+			}
+			err := r.Get(context.TODO(), nsn, newJob)
+			if err != nil {
+				if !kerrors.IsNotFound(err) {
+					return reconcile.Result{Requeue: true}, err
+				}
+
+				// Job doesnt exist, create it.
+				log.Info("forgetting the restic snapshot")
+				err := r.DeleteResticSnapshot(backup)
+				return reconcile.Result{RequeueAfter: 5 * time.Second}, err
+			}
+
+			removeFinalizer := false
+			for _, condition := range newJob.Status.Conditions {
+				if condition.Type == batchv1.JobComplete {
+					log.Info("restic forget job complete")
+					removeFinalizer = true
+				} else if condition.Type == batchv1.JobFailed {
+					log.Error("restic forget job failed")
+					removeFinalizer = true
+				}
+			}
+			if removeFinalizer {
+				log.Infof("removing finalizer %s", Finalizer)
+
+				// Remove this finalizer from the list and update it.
+				backup.ObjectMeta.Finalizers = slice.Remove(backup.ObjectMeta.Finalizers, Finalizer)
+				err := r.Update(context.Background(), backup)
+				return reconcile.Result{}, err
+			} else {
+				log.Info("doing another loop")
+				return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+			}
+		}
+
+		return reconcile.Result{}, nil
+	}
+
+	// Backup has completed or failed, return early.
+	if backup.Status.Phase == v1.PhaseCompleted || backup.Status.Phase == v1.PhaseFailed {
+		return reconcile.Result{}, nil
+	}
+
+	if _, found := backup.ObjectMeta.GetLabels()["site"]; !found {
+		// @todo add some info to the status identifying the backup failed
+		log.Info(fmt.Sprintf("Backup %s doesn't have a site label, skipping.", backup.ObjectMeta.Name))
+		return reconcile.Result{}, nil
+	}
+
+	return r.SyncJob(log, backup)
+}
+
+// SyncJob creates or updates the restic backup jobs.
+func (r *ReconcileBackup) SyncJob(log log.Logger, backup *extensionv1.Backup) (reconcile.Result, error) {
 	// Backup has completed or failed, return early.
 	if backup.Status.Phase == v1.PhaseCompleted || backup.Status.Phase == v1.PhaseFailed {
 		return reconcile.Result{}, nil
@@ -138,6 +217,10 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", resticutils.Prefix, backup.ObjectMeta.Name),
 			Namespace: backup.ObjectMeta.Namespace,
+			Labels: map[string]string{
+				"app":          "restic",
+				"resticAction": "backup",
+			},
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:           &parallelism,
@@ -199,6 +282,64 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 	log.Info("Reconcile finished")
 
 	return reconcile.Result{}, nil
+}
+
+// DeleteResticSnapshot creates the job to forget a restic snapshot.
+func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error {
+	var params = resticutils.PodSpecParams{
+		CPU:         "100m",
+		Memory:      "512Mi",
+		ResticImage: "docker.io/restic/restic:0.9.5",
+		MySQLImage:  "skpr/mtk-mysql",
+		WorkingDir:  "/home/shepherd",
+		Tags:        []string{},
+	}
+
+	spec, err := resticutils.PodSpecDelete(
+		backup.Status.ResticID,
+		backup.ObjectMeta.Namespace,
+		backup.ObjectMeta.GetLabels()["site"],
+		params,
+	)
+	if err != nil {
+		return err
+	}
+
+	var (
+		parallelism    int32 = 1
+		completions    int32 = 1
+		activeDeadline int64 = 3600
+		backOffLimit   int32 = 2
+		//ttl            int32 = 3600
+	)
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-delete-%s", resticutils.Prefix, backup.Name),
+			Namespace: backup.ObjectMeta.Namespace,
+			Labels: map[string]string{
+				"app":          "restic",
+				"resticAction": "delete",
+			},
+		},
+		Spec: batchv1.JobSpec{
+			// @todo uncomment this when the feature becomes available (requires kube v1.12+).
+			// ttlSecondsAfterFinished: &ttl,
+			Parallelism:           &parallelism,
+			Completions:           &completions,
+			ActiveDeadlineSeconds: &activeDeadline,
+			BackoffLimit:          &backOffLimit,
+			Template: corev1.PodTemplateSpec{
+				Spec: spec,
+			},
+		},
+	}
+
+	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, job, func(obj runtime.Object) error {
+		return nil
+	})
+
+	return err
 }
 
 // getResticIdFromJob parses output from a job's pods and returns a restic ID from the logs.

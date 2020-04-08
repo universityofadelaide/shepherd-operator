@@ -370,6 +370,61 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 	return spec, nil
 }
 
+// PodSpecDelete defines how a snapshot can be forgotten using a Pod.
+func PodSpecDelete(resticId, namespace, site string, params PodSpecParams) (corev1.PodSpec, error) {
+	cpu, err := resource.ParseQuantity(params.CPU)
+	if err != nil {
+		return corev1.PodSpec{}, err
+	}
+
+	memory, err := resource.ParseQuantity(params.Memory)
+	if err != nil {
+		return corev1.PodSpec{}, err
+	}
+
+	resources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    cpu,
+			corev1.ResourceMemory: memory,
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    cpu,
+			corev1.ResourceMemory: memory,
+		},
+	}
+
+	var containers []corev1.Container
+	containers = append(containers, WrapContainer(corev1.Container{
+		Name:       fmt.Sprintf("restic-delete-%s", resticId),
+		Image:      params.ResticImage,
+		Resources:  resources,
+		WorkingDir: ResticRepoDir,
+		Command: []string{
+			"/bin/sh", "-c",
+		},
+		Args: []string{
+			fmt.Sprintf("restic forget --prune %s", resticId),
+		},
+	}, site, namespace))
+
+	spec := corev1.PodSpec{
+		RestartPolicy: corev1.RestartPolicyNever,
+		Containers:    containers,
+		Volumes: AttachVolume([]corev1.Volume{
+			{
+				Name: VolumeRepository,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: VolumeRepository,
+					},
+				},
+			},
+		}),
+	}
+
+	return spec, nil
+}
+
 // mysqlEnvVars returns a list of environment variables for a container based on the mysql spec.
 func mysqlEnvVars(mysqlStatus v1.SpecMySQL) []corev1.EnvVar {
 	return []corev1.EnvVar{
