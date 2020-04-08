@@ -412,12 +412,6 @@ func PodSpecDelete(resticId, namespace, site string, params PodSpecParams) (core
 		Containers:    containers,
 		Volumes: AttachVolume([]corev1.Volume{
 			{
-				Name: VolumeMySQL,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			{
 				Name: VolumeRepository,
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
