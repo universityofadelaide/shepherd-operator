@@ -30,12 +30,18 @@ manager: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
-	go run ./cmd/manager/main.go
+	oc login -u system:admin
+	nohup go run ./cmd/manager/main.go &
+	sleep 5
+	echo "Use tail -f nohup.out to check on backups."
+	oc login -u developer -p developer
 
 # Install CRDs and RBAC into a cluster
 install: manifests
+	oc login -u system:admin
 	kubectl apply -f config/crds
 	kubectl apply -f config/rbac
+	oc login -u developer -p developer
 
 kustomize:
 	@echo "updating kustomize namespace to ${NAMESPACE}"
