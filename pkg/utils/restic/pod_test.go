@@ -546,7 +546,7 @@ func TestPodSpecRestore(t *testing.T) {
 					"/bin/sh", "-c",
 				},
 				Args: []string{
-					"drush -r /code/web cr && drush -r /code/web -y updb && robo config:import-plus && drush -r /code/web cr",
+					"export REDIS_ENABLED=0 && export MEMCACHE_ENABLED=0 && drush -r /code/web cr && drush -r /code/web -y updb && robo config:import-plus && drush -r /code/web cr",
 				},
 				Env: []corev1.EnvVar{
 					{
