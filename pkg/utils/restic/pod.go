@@ -347,7 +347,7 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 		},
 		Args: []string{
 			helper.TprintfMustParse(
-				"drush -r {{.WebDir}}/web cr && drush -r {{.WebDir}}/web -y updb && robo config:import-plus && drush -r {{.WebDir}}/web cr",
+				"export REDIS_ENABLED=0 && export MEMCACHE_ENABLED=0 && drush -r {{.WebDir}}/web cr && drush -r {{.WebDir}}/web -y updb && robo config:import-plus && drush -r {{.WebDir}}/web cr",
 				map[string]interface{}{
 					"WebDir": WebDirectory,
 				},
