@@ -17,7 +17,7 @@ import (
 
 func TestPodSpecBackup(t *testing.T) {
 	var params = PodSpecParams{
-		CPU:         "100m",
+		CPU:         "500m",
 		Memory:      "512Mi",
 		ResticImage: "test/image",
 		MySQLImage:  "test/mysqlimage",
@@ -262,8 +262,8 @@ func TestPodSpecBackup(t *testing.T) {
 
 func TestPodSpecRestore(t *testing.T) {
 	var params = PodSpecParams{
-		CPU:         "100m",
-		Memory:      "512Mi",
+		CPU:         "500m",
+		Memory:      "1024Mi",
 		ResticImage: "test/image",
 		MySQLImage:  "test/mysqlimage",
 		WorkingDir:  "/home/test",

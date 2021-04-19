@@ -194,7 +194,7 @@ func (r *ReconcileBackup) SyncJob(log log.Logger, backup *extensionv1.Backup) (r
 		return reconcile.Result{}, nil
 	}
 	var params = resticutils.PodSpecParams{
-		CPU:         "100m",
+		CPU:         "500m",
 		Memory:      "512Mi",
 		ResticImage: "docker.io/restic/restic:0.9.5",
 		MySQLImage:  "skpr/mtk-mysql",
@@ -287,7 +287,7 @@ func (r *ReconcileBackup) SyncJob(log log.Logger, backup *extensionv1.Backup) (r
 // DeleteResticSnapshot creates the job to forget a restic snapshot.
 func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error {
 	var params = resticutils.PodSpecParams{
-		CPU:         "100m",
+		CPU:         "500m",
 		Memory:      "512Mi",
 		ResticImage: "docker.io/restic/restic:0.9.5",
 		MySQLImage:  "skpr/mtk-mysql",
