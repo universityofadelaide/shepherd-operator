@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ref "k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -284,12 +285,16 @@ func (r *ReconcileBackupScheduled) ScheduleNextBackup(scheduled *extensionv1.Bac
 		return result, nil
 	}
 
+	r.log.Debugf("[ScheduleNextBackup] Missed: %s Next: %s", missedRun.Unix(), nextRun.Unix())
+
 	// make sure we're not too late to start the run
 	tooLate := false
 
 	if scheduled.Spec.Schedule.StartingDeadlineSeconds != nil {
 		tooLate = missedRun.Add(time.Duration(*scheduled.Spec.Schedule.StartingDeadlineSeconds) * time.Second).Before(r.Now())
 	}
+
+	r.log.Debugf("[ScheduleNextBackup] scheduled.Spec.Schedule.StartingDeadlineSeconds: %s", scheduled.Spec.Schedule.StartingDeadlineSeconds)
 
 	if tooLate {
 		return result, nil
@@ -318,9 +323,20 @@ func (r *ReconcileBackupScheduled) ScheduleNextBackup(scheduled *extensionv1.Bac
 
 	r.recorder.Eventf(scheduled, corev1.EventTypeNormal, events.EventCreate, "Creating Backup: %s", backup.ObjectMeta.Name)
 
+	existing := &extensionv1.Backup{}
+	if err = r.Get(context.TODO(), types.NamespacedName{
+		Name:      backup.ObjectMeta.Name,
+		Namespace: backup.ObjectMeta.Namespace,
+	}, existing); err == nil {
+		r.log.Debugf("[ScheduleNextBackup] Backup already created: %s  %s", existing.ObjectMeta.Name, backup.ObjectMeta.Name)
+		return result, nil
+	}
+
 	if err := r.Create(context.Background(), backup); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to create Backup")
 	}
+
+	r.log.Debugf("[ScheduleNextBackup] Backup job created: %s", backup.ObjectMeta.Name)
 
 	return result, nil
 }
