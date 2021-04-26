@@ -182,6 +182,44 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 	assert.Contains(t, err.Error(), "expected exactly 5 fields, found 7")
 }
 
+func TestReconcileInvalidDeadline(t *testing.T) {
+	apis.AddToScheme(scheme.Scheme)
+
+	instance := &extensionv1.BackupScheduled{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: corev1.NamespaceDefault,
+			Labels: map[string]string{
+				"site": "foo",
+			},
+		},
+		Spec: extensionv1.BackupScheduledSpec{
+			Schedule: shpmetav1.ScheduledSpec{
+				CronTab: "0 0 * * * * *",
+			},
+		},
+	}
+
+	// Query which will be used to find our BackupScheduled object.
+	query := types.NamespacedName{
+		Name:      instance.ObjectMeta.Name,
+		Namespace: instance.ObjectMeta.Namespace,
+	}
+
+	c, err := clock.New("2020-04-02T00:00:03Z")
+	assert.Nil(t, err)
+	rd := &ReconcileBackupScheduled{
+		Client: fake.NewFakeClient(instance),
+		scheme: scheme.Scheme,
+		Clock:  c,
+	}
+
+	_, err = rd.Reconcile(reconcile.Request{
+		NamespacedName: query,
+	})
+	assert.Contains(t, err.Error(), "expected exactly 5 fields, found 7")
+}
+
 func TestReconcileRetention(t *testing.T) {
 	apis.AddToScheme(scheme.Scheme)
 
