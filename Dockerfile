@@ -8,7 +8,7 @@ COPY cmd/    cmd/
 COPY vendor/ vendor/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/universityofadelaide/shepherd-operator/cmd/manager
+RUN GO111MODULE=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/universityofadelaide/shepherd-operator/cmd/manager
 
 # Copy the controller-manager into a thin image
 FROM ubuntu:latest
