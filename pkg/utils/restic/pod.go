@@ -2,6 +2,7 @@ package restic
 
 import (
 	"fmt"
+
 	"github.com/pkg/errors"
 	v1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 
@@ -11,8 +12,9 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
 
-	"github.com/universityofadelaide/shepherd-operator/pkg/utils/helper"
 	"strings"
+
+	"github.com/universityofadelaide/shepherd-operator/pkg/utils/helper"
 )
 
 const (
@@ -72,7 +74,7 @@ func PodSpecBackup(backup *extensionv1.Backup, params PodSpecParams, siteId stri
 			"/bin/sh", "-c",
 		},
 		Args: []string{
-			// Init will return an exit code of 1 if the repository alread exists.
+			// Init will return an exit code of 1 if the repository already exists.
 			// If this failed for a non "already exists" error then we will see it
 			// in the main containers "restic backup" execution.
 			"restic init || true",
