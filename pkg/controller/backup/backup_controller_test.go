@@ -64,6 +64,9 @@ func TestReconcileDelete(t *testing.T) {
 			Finalizers:        []string{Finalizer},
 		},
 		Spec: extensionv1.BackupSpec{},
+		Status: extensionv1.BackupStatus{
+			ResticID: "test",
+		},
 	}
 
 	// Query which will be used to find our Backup object.
