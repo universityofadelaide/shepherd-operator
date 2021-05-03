@@ -3,6 +3,7 @@ package backupscheduled
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -105,8 +106,12 @@ type ReconcileBackupScheduled struct {
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backupscheduleds/finalizers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.log = logger.New(ControllerName, request.Namespace, request.Name)
-	r.log.SetLevel("debug")
-	r.log.Info("Starting reconcile loop")
+	r.log.SetLevel("info")
+	if os.Getenv("DEBUG") == "debug" {
+		r.log.SetLevel("debug")
+	}
+
+	r.log.Debugf("Starting reconcile loop")
 
 	scheduled := &extensionv1.BackupScheduled{}
 	err := r.Get(context.TODO(), request.NamespacedName, scheduled)
@@ -126,7 +131,7 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("Querying Backups")
+	r.log.Debugf("Querying Backups")
 	var backups extensionv1.BackupList
 	listOptions := client.MatchingField(OwnerKey, request.Name)
 	listOptions.Namespace = request.Namespace
@@ -135,13 +140,13 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("Enforcing backup retention policies")
+	r.log.Debugf("Enforcing backup retention policies")
 	err = r.ExecuteRetentionPolicies(scheduled, backups)
 	if err != nil {
 		r.log.Error(err.Error())
 	}
 
-	r.log.Info("Filtering Backups")
+	r.log.Debugf("Filtering Backups")
 	active, successful, failed, err := r.SortBackups(scheduled, backups)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -154,7 +159,7 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("Cleaning up old Backups")
+	r.log.Debugf("Cleaning up old Backups")
 	err = r.Cleanup(scheduled, successful, failed)
 	if err != nil {
 		return reconcile.Result{}, err
