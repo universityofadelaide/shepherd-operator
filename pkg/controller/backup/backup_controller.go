@@ -264,7 +264,7 @@ func (r *ReconcileBackup) SyncJob(log log.Logger, backup *extensionv1.Backup) (r
 			}
 
 			if resticId != "" {
-				//status.ResticID = resticId
+				status.ResticID = resticId
 				status.Phase = v1.PhaseCompleted
 			} else {
 				status.Phase = v1.PhaseFailed
