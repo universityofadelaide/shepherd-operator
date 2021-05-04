@@ -3,6 +3,7 @@ package backupscheduled
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ref "k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -104,8 +106,12 @@ type ReconcileBackupScheduled struct {
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backupscheduleds/finalizers,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.log = logger.New(ControllerName, request.Namespace, request.Name)
-	r.log.SetLevel("debug")
-	r.log.Info("Starting reconcile loop")
+	r.log.SetLevel("info")
+	if os.Getenv("DEBUG") == "debug" {
+		r.log.SetLevel("debug")
+	}
+
+	r.log.Debugf("Starting reconcile loop")
 
 	scheduled := &extensionv1.BackupScheduled{}
 	err := r.Get(context.TODO(), request.NamespacedName, scheduled)
@@ -125,7 +131,7 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("Querying Backups")
+	r.log.Debugf("Querying Backups")
 	var backups extensionv1.BackupList
 	listOptions := client.MatchingField(OwnerKey, request.Name)
 	listOptions.Namespace = request.Namespace
@@ -134,13 +140,13 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("Enforcing backup retention policies")
+	r.log.Debugf("Enforcing backup retention policies")
 	err = r.ExecuteRetentionPolicies(scheduled, backups)
 	if err != nil {
 		r.log.Error(err.Error())
 	}
 
-	r.log.Info("Filtering Backups")
+	r.log.Debugf("Filtering Backups")
 	active, successful, failed, err := r.SortBackups(scheduled, backups)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -153,7 +159,7 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("Cleaning up old Backups")
+	r.log.Debugf("Cleaning up old Backups")
 	err = r.Cleanup(scheduled, successful, failed)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -284,12 +290,16 @@ func (r *ReconcileBackupScheduled) ScheduleNextBackup(scheduled *extensionv1.Bac
 		return result, nil
 	}
 
+	r.log.Debugf("[ScheduleNextBackup] Missed: %s Next: %s", missedRun.Unix(), nextRun.Unix())
+
 	// make sure we're not too late to start the run
 	tooLate := false
 
 	if scheduled.Spec.Schedule.StartingDeadlineSeconds != nil {
 		tooLate = missedRun.Add(time.Duration(*scheduled.Spec.Schedule.StartingDeadlineSeconds) * time.Second).Before(r.Now())
 	}
+
+	r.log.Debugf("[ScheduleNextBackup] scheduled.Spec.Schedule.StartingDeadlineSeconds: %s", scheduled.Spec.Schedule.StartingDeadlineSeconds)
 
 	if tooLate {
 		return result, nil
@@ -318,9 +328,20 @@ func (r *ReconcileBackupScheduled) ScheduleNextBackup(scheduled *extensionv1.Bac
 
 	r.recorder.Eventf(scheduled, corev1.EventTypeNormal, events.EventCreate, "Creating Backup: %s", backup.ObjectMeta.Name)
 
+	existing := &extensionv1.Backup{}
+	if err = r.Get(context.TODO(), types.NamespacedName{
+		Name:      backup.ObjectMeta.Name,
+		Namespace: backup.ObjectMeta.Namespace,
+	}, existing); err == nil {
+		r.log.Debugf("[ScheduleNextBackup] Backup already created: %s  %s", existing.ObjectMeta.Name, backup.ObjectMeta.Name)
+		return result, nil
+	}
+
 	if err := r.Create(context.Background(), backup); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to create Backup")
 	}
+
+	r.log.Debugf("[ScheduleNextBackup] Backup job created: %s", backup.ObjectMeta.Name)
 
 	return result, nil
 }

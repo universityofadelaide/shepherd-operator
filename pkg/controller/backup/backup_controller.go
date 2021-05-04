@@ -129,19 +129,26 @@ func (r *ReconcileBackup) Reconcile(request reconcile.Request) (reconcile.Result
 				Namespace: backup.Namespace,
 				Name:      fmt.Sprintf("%s-delete-%s", resticutils.Prefix, backup.Name),
 			}
+			removeFinalizer := false
 			err := r.Get(context.TODO(), nsn, newJob)
 			if err != nil {
 				if !kerrors.IsNotFound(err) {
 					return reconcile.Result{Requeue: true}, err
 				}
 
-				// Job doesnt exist, create it.
 				log.Info("forgetting the restic snapshot")
-				err := r.DeleteResticSnapshot(backup)
-				return reconcile.Result{RequeueAfter: 5 * time.Second}, err
+				log.Infof("ResticID: %s", backup.Status.ResticID)
+				if backup.Status.ResticID == "" {
+					// Allow the backup to delete when we don't know the restic id.
+					log.Errorf("No restic ID associated when attempting to delete backup: %s", backup.ObjectMeta.Name)
+					removeFinalizer = true
+				} else {
+					// Job doesnt exist, create it.
+					err := r.DeleteResticSnapshot(backup)
+					return reconcile.Result{RequeueAfter: 5 * time.Second}, err
+				}
 			}
 
-			removeFinalizer := false
 			for _, condition := range newJob.Status.Conditions {
 				if condition.Type == batchv1.JobComplete {
 					log.Info("restic forget job complete")
@@ -293,6 +300,10 @@ func (r *ReconcileBackup) DeleteResticSnapshot(backup *extensionv1.Backup) error
 		MySQLImage:  "skpr/mtk-mysql",
 		WorkingDir:  "/home/shepherd",
 		Tags:        []string{},
+	}
+
+	if backup.Status.ResticID == "" {
+		return errors.Errorf("Could't delete restic snapshot. Restic ID missing for backup: %s", backup.ObjectMeta.Name)
 	}
 
 	spec, err := resticutils.PodSpecDelete(
