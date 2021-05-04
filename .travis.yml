@@ -1,6 +1,6 @@
 language: go
 go:
-  - master
+  - 1.16.x
 
 env:
   - GO111MODULE=off
