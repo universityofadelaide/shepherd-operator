@@ -133,6 +133,8 @@ func (r *ReconcileBackupScheduled) Reconcile(request reconcile.Request) (reconci
 
 	r.log.Debugf("Querying Backups")
 	var backups extensionv1.BackupList
+	// lists backups "owned" by backupscheduleds. If owner is deleted,
+	// backups become orphaned and retention policy won't apply.
 	listOptions := client.MatchingField(OwnerKey, request.Name)
 	listOptions.Namespace = request.Namespace
 	err = r.List(context.Background(), listOptions, &backups)
