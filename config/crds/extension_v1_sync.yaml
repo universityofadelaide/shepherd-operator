@@ -34,6 +34,8 @@ spec:
           type: object
         spec:
           properties:
+            backupEnv:
+              type: string
             backupSpec:
               properties:
                 mysql:
@@ -43,7 +45,7 @@ spec:
                   description: Volumes which will be backed up.
                   type: object
               type: object
-            deploymentName:
+            restoreEnv:
               type: string
             restoreSpec:
               description: We can use the backup spec for the restore spec as we just
@@ -56,8 +58,13 @@ spec:
                   description: Volumes which will be backed up.
                   type: object
               type: object
+            site:
+              description: Correlates to node ids in shepherd.
+              type: string
           required:
-          - deploymentName
+          - site
+          - backupEnv
+          - restoreEnv
           - backupSpec
           - restoreSpec
           type: object

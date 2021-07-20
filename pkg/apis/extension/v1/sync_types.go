@@ -22,13 +22,13 @@ import (
 	shpmetav1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // SyncSpec defines the desired state of Sync
 type SyncSpec struct {
-	DeploymentName string     `json:"deploymentName"`
-	BackupSpec     BackupSpec `json:"backupSpec"`
+	// Correlates to node ids in shepherd.
+	Site       string     `json:"site"`
+	BackupEnv  string     `json:"backupEnv"`
+	RestoreEnv string     `json:"restoreEnv"`
+	BackupSpec BackupSpec `json:"backupSpec"`
 	// We can use the backup spec for the restore spec as we just need volumes/dbs.
 	RestoreSpec BackupSpec `json:"restoreSpec"`
 }

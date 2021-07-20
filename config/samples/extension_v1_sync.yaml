@@ -3,7 +3,9 @@ kind: Sync
 metadata:
   name: node-123-sync-xyz
 spec:
-  deploymentName: node-123
+  site: 2
+  backupEnv: 123
+  restoreEnv: 456
   backupSpec:
     volumes:
       shared:

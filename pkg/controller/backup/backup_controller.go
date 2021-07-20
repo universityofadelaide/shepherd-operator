@@ -195,11 +195,6 @@ func (r *ReconcileBackup) SyncJob(log log.Logger, backup *extensionv1.Backup) (r
 		return reconcile.Result{}, nil
 	}
 
-	if _, found := backup.ObjectMeta.GetLabels()["site"]; !found {
-		// @todo add some info to the status identifying the backup failed
-		log.Info(fmt.Sprintf("Backup %s doesn't have a site label, skipping.", backup.ObjectMeta.Name))
-		return reconcile.Result{}, nil
-	}
 	var params = resticutils.PodSpecParams{
 		CPU:         "500m",
 		Memory:      "512Mi",

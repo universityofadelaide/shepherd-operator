@@ -135,6 +135,10 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("sync-%s-backup", sync.ObjectMeta.Name),
 			Namespace: sync.ObjectMeta.Namespace,
+			Labels: map[string]string{
+				"site":        sync.Spec.Site,
+				"environment": sync.Spec.BackupEnv,
+			},
 		},
 		Spec: sync.Spec.BackupSpec,
 	}
@@ -157,7 +161,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	if err != nil {
 		return reconcile.Result{}, errorspkg.Wrap(err, "failed to get deploymentconfig client")
 	}
-	dc, err := v1client.DeploymentConfigs(sync.ObjectMeta.Namespace).Get(sync.Spec.DeploymentName, metav1.GetOptions{})
+	dc, err := v1client.DeploymentConfigs(sync.ObjectMeta.Namespace).Get(fmt.Sprintf("node-%s", sync.Spec.RestoreEnv), metav1.GetOptions{})
 	if err != nil {
 		// Don't throw an error here to account for syncs that were created before an environment was deleted.
 		return reconcile.Result{}, nil
@@ -173,6 +177,10 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("sync-%s-restore", sync.ObjectMeta.Name),
 				Namespace: sync.ObjectMeta.Namespace,
+				Labels: map[string]string{
+					"site":        sync.Spec.Site,
+					"environment": sync.Spec.RestoreEnv,
+				},
 			},
 			Spec: extensionv1.RestoreSpec{
 				BackupName: backup.ObjectMeta.Name,
