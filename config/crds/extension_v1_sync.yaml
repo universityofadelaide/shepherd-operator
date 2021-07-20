@@ -6,11 +6,17 @@ metadata:
     controller-tools.k8s.io: "1.0"
   name: syncs.extension.shepherd
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.restorePhase
+    name: Status
+    type: string
   group: extension.shepherd
   names:
     kind: Sync
     plural: syncs
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:

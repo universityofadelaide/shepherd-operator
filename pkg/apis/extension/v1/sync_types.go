@@ -48,6 +48,8 @@ type SyncStatus struct {
 
 // Sync is the Schema for the syncs API
 // +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=.status.restorePhase
 type Sync struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
