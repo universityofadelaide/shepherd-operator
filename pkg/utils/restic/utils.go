@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // Helper function to format tags.
@@ -26,4 +29,12 @@ func ParseSnapshotID(input string) string {
 		return ""
 	}
 	return match[1]
+}
+
+// RequeueAfterSeconds returns a reconcile.Result to requeue after seconds time.
+func RequeueAfterSeconds(seconds int64) reconcile.Result {
+	return reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Duration(seconds) * time.Second,
+	}
 }

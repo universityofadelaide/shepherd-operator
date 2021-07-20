@@ -67,7 +67,7 @@ TODO
     ```
 3. Configure RBAC rules for accounts which should have access to create Backup/Restore objects (i.e. shepherd service account)
     ```
-    oc create clusterrole shepherd-backups --verb=get,list,create,update,delete --resource=backups,restores
+    oc create clusterrole shepherd-backups --verb=get,list,create,update,delete --resource=backups,restores,syncs
     oc adm policy add-cluster-role-to-user shepherd-backups --serviceaccount=shepherd
     ```
 

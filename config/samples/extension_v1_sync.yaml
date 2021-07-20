@@ -1,0 +1,9 @@
+apiVersion: extension.shepherd/v1
+kind: Sync
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: sync-sample
+spec:
+  # Add fields here
+  foo: bar
