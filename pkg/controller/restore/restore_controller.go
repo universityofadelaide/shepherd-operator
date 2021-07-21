@@ -122,14 +122,18 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 		log.Info(fmt.Sprintf("Skipping restore %s because the backup %s failed", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
 		return reconcile.Result{}, nil
 	case v1.PhaseNew:
-		// Requeue the operation for 60 seconds if the backup is new.
-		return resticutils.RequeueAfterSeconds(60), nil
-	case v1.PhaseInProgress:
-		// Requeue the operation for 30 seconds if the backup is still in progress.
+		// Requeue the operation for 30 seconds if the backup is new.
+		log.Info(fmt.Sprintf("Requeueing restore %s because the backup %s is New", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
 		return resticutils.RequeueAfterSeconds(30), nil
+	case v1.PhaseInProgress:
+		// Requeue the operation for 15 seconds if the backup is still in progress.
+		log.Info(fmt.Sprintf("Requeueing restore %s because the backup %s is In Progress", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
+		return resticutils.RequeueAfterSeconds(15), nil
 	}
+
 	// Catch-all for any other non Completed phases.
 	if backup.Status.Phase != v1.PhaseCompleted {
+		log.Info(fmt.Sprintf("Skipping restore %s because the backup %s is in an unknown state: %s", restore.ObjectMeta.Name, backup.ObjectMeta.Name, backup.Status.Phase))
 		return reconcile.Result{}, nil
 	}
 

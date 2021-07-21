@@ -85,15 +85,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes in a Restore owned by a Sync.
-	err = c.Watch(&source.Kind{Type: &extensionv1.Restore{}}, &handler.EnqueueRequestForOwner{
+	return c.Watch(&source.Kind{Type: &extensionv1.Restore{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &extensionv1.Sync{},
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 var _ reconcile.Reconciler = &ReconcileSync{}
@@ -198,7 +193,10 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 		status.RestoreName = restore.ObjectMeta.Name
 		status.RestorePhase = restore.Status.Phase
-		status.CompletionTime = restore.Status.CompletionTime
+		// Use the restore completion time if it's after the backup completion time.
+		if status.CompletionTime == nil || (restore.Status.CompletionTime != nil && restore.Status.CompletionTime.After(status.CompletionTime.Time)) {
+			status.CompletionTime = restore.Status.CompletionTime
+		}
 	}
 
 	if diff := deep.Equal(sync.Status, status); diff != nil {
