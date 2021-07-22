@@ -77,7 +77,7 @@ func TestReconcile(t *testing.T) {
 	}
 	deploymentconfig := &osv1.DeploymentConfig{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testdc",
+			Name:      "node-4",
 			Namespace: corev1.NamespaceDefault,
 		},
 		Status: osv1.DeploymentConfigStatus{
@@ -111,14 +111,25 @@ func TestReconcile(t *testing.T) {
 	err = rd.Client.Get(context.TODO(), query, sync)
 	assert.Nil(t, err)
 
-	// Query which will be used to find our finalizer job object.
 	backupName := "sync-test-backup"
 	backupQuery := types.NamespacedName{
 		Name:      backupName,
 		Namespace: instance.ObjectMeta.Namespace,
 	}
-	found := &extensionv1.Backup{}
-	err = rd.Client.Get(context.TODO(), backupQuery, found)
+	backup := &extensionv1.Backup{}
+	err = rd.Client.Get(context.TODO(), backupQuery, backup)
 	assert.Nil(t, err)
-	assert.Equal(t, backupName, found.Name, "backup found")
+	assert.Equal(t, backupName, backup.Name)
+	assert.Equal(t, backup.Spec.Volumes["foo"].ClaimName, "bar")
+
+	restoreName := "sync-test-restore"
+	restoreQuery := types.NamespacedName{
+		Name:      restoreName,
+		Namespace: instance.ObjectMeta.Namespace,
+	}
+	restore := &extensionv1.Restore{}
+	err = rd.Client.Get(context.TODO(), restoreQuery, restore)
+	assert.Nil(t, err)
+	assert.Equal(t, restoreName, restore.Name)
+	assert.Equal(t, restore.Spec.Volumes["foo2"].ClaimName, "bar2")
 }
