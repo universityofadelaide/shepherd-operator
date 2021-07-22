@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	osv1 "github.com/openshift/api/apps/v1"
+	osclient "github.com/openshift/client-go/apps/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,8 +13,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	osclient "github.com/openshift/client-go/apps/clientset/versioned/fake"
-	osv1 "github.com/openshift/api/apps/v1"
 
 	"github.com/universityofadelaide/shepherd-operator/pkg/apis"
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
@@ -28,11 +28,11 @@ func TestReconcile(t *testing.T) {
 			Namespace: corev1.NamespaceDefault,
 		},
 		Spec: extensionv1.SyncSpec{
-			Site: "2",
-			BackupEnv: "3",
+			Site:       "2",
+			BackupEnv:  "3",
 			RestoreEnv: "4",
 			BackupSpec: extensionv1.BackupSpec{
-				Volumes:  map[string]shpmetav1.SpecVolume {
+				Volumes: map[string]shpmetav1.SpecVolume{
 					"foo": {
 						ClaimName: "bar",
 					},
@@ -46,14 +46,14 @@ func TestReconcile(t *testing.T) {
 								Password: "test2",
 								Database: "test3",
 								Hostname: "test4",
-								Port: "test5",
+								Port:     "test5",
 							},
 						},
 					},
 				},
 			},
 			RestoreSpec: extensionv1.BackupSpec{
-				Volumes:  map[string]shpmetav1.SpecVolume {
+				Volumes: map[string]shpmetav1.SpecVolume{
 					"foo2": {
 						ClaimName: "bar2",
 					},
@@ -67,7 +67,7 @@ func TestReconcile(t *testing.T) {
 								Password: "test22",
 								Database: "test33",
 								Hostname: "test44",
-								Port: "test55",
+								Port:     "test55",
 							},
 						},
 					},
@@ -83,7 +83,7 @@ func TestReconcile(t *testing.T) {
 		Status: osv1.DeploymentConfigStatus{
 			Conditions: []osv1.DeploymentCondition{
 				{
-					Type: osv1.DeploymentAvailable,
+					Type:   osv1.DeploymentAvailable,
 					Status: corev1.ConditionTrue,
 				},
 			},
@@ -97,9 +97,9 @@ func TestReconcile(t *testing.T) {
 	}
 
 	rd := &ReconcileSync{
-		Client: fake.NewFakeClient(instance),
+		Client:   fake.NewFakeClient(instance),
 		OsClient: osclient.NewSimpleClientset(deploymentconfig).AppsV1(),
-		scheme: scheme.Scheme,
+		scheme:   scheme.Scheme,
 	}
 
 	_, err := rd.Reconcile(reconcile.Request{

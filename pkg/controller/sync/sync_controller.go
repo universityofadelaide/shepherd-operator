@@ -59,8 +59,8 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager, osclient osv1client.AppsV1Interface) reconcile.Reconciler {
 	return &ReconcileSync{
 		OsClient: osclient,
-		Client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
 	}
 }
 
@@ -100,7 +100,7 @@ var _ reconcile.Reconciler = &ReconcileSync{}
 type ReconcileSync struct {
 	client.Client
 	OsClient osv1client.AppsV1Interface
-	scheme *runtime.Scheme
+	scheme   *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a Sync object and makes changes based on the state read
