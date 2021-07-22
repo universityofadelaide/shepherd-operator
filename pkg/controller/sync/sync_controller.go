@@ -28,7 +28,6 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -49,13 +48,17 @@ const ControllerName = "sync-controller"
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	v1client, err := osv1client.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	return add(mgr, newReconciler(mgr, v1client))
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+// newReconciler returns a new ReconcileSync.
+func newReconciler(mgr manager.Manager, osclient osv1client.AppsV1Interface) reconcile.Reconciler {
 	return &ReconcileSync{
-		Config: mgr.GetConfig(),
+		OsClient: osclient,
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 	}
@@ -96,7 +99,7 @@ var _ reconcile.Reconciler = &ReconcileSync{}
 // ReconcileSync reconciles a Sync object
 type ReconcileSync struct {
 	client.Client
-	Config *rest.Config
+	OsClient osv1client.AppsV1Interface
 	scheme *runtime.Scheme
 }
 
@@ -152,11 +155,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		CompletionTime: backup.Status.CompletionTime,
 	}
 
-	v1client, err := osv1client.NewForConfig(r.Config)
-	if err != nil {
-		return reconcile.Result{}, errorspkg.Wrap(err, "failed to get deploymentconfig client")
-	}
-	dc, err := v1client.DeploymentConfigs(sync.ObjectMeta.Namespace).Get(fmt.Sprintf("node-%s", sync.Spec.RestoreEnv), metav1.GetOptions{})
+	dc, err := r.OsClient.DeploymentConfigs(sync.ObjectMeta.Namespace).Get(fmt.Sprintf("node-%s", sync.Spec.RestoreEnv), metav1.GetOptions{})
 	if err != nil {
 		// Don't throw an error here to account for syncs that were created before an environment was deleted.
 		return reconcile.Result{}, nil
