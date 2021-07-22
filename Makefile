@@ -36,6 +36,9 @@ run: generate fmt vet
 	echo "Use tail -f nohup.out to check on backups."
 	oc login -u developer -p developer
 
+run-inline: generate fmt vet
+	go run ./cmd/manager/main.go --metrics-addr=":8081"
+
 debug: manager
 	oc login -u system:admin
 	DEBUG="debug" go run ./cmd/manager/main.go --metrics-addr=":8081"
