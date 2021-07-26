@@ -152,7 +152,6 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		BackupName:     backup.ObjectMeta.Name,
 		BackupPhase:    backup.Status.Phase,
 		StartTime:      backup.Status.StartTime,
-		CompletionTime: backup.Status.CompletionTime,
 	}
 
 	dc, err := r.OsClient.DeploymentConfigs(sync.ObjectMeta.Namespace).Get(fmt.Sprintf("node-%s", sync.Spec.RestoreEnv), metav1.GetOptions{})
@@ -192,10 +191,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 		status.RestoreName = restore.ObjectMeta.Name
 		status.RestorePhase = restore.Status.Phase
-		// Use the restore completion time if it's after the backup completion time.
-		if status.CompletionTime == nil || (restore.Status.CompletionTime != nil && restore.Status.CompletionTime.After(status.CompletionTime.Time)) {
-			status.CompletionTime = restore.Status.CompletionTime
-		}
+		status.CompletionTime = restore.Status.CompletionTime
 	}
 
 	if diff := deep.Equal(sync.Status, status); diff != nil {
