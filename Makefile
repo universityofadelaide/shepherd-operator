@@ -37,6 +37,7 @@ run: generate fmt vet
 	oc login -u developer -p developer
 
 run-inline: generate fmt vet
+	oc login -u system:admin
 	go run ./cmd/manager/main.go --metrics-addr=":8081"
 
 debug: manager
