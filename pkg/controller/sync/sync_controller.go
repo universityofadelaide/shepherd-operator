@@ -19,6 +19,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-test/deep"
 	osv1 "github.com/openshift/api/apps/v1"
@@ -37,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/extension/v1"
+	shpmetav1 "github.com/universityofadelaide/shepherd-operator/pkg/apis/meta/v1"
 	"github.com/universityofadelaide/shepherd-operator/pkg/utils/controller/logger"
 	syncutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/k8s/sync"
 	resticutils "github.com/universityofadelaide/shepherd-operator/pkg/utils/restic"
@@ -129,13 +131,18 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
+	now := time.Now()
 	backup := &extensionv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("sync-%s-backup", sync.ObjectMeta.Name),
 			Namespace: sync.ObjectMeta.Namespace,
+			Annotations: map[string]string{
+				resticutils.FriendlyNameAnnotation: now.Format(shpmetav1.FriendlyNameFormat),
+			},
 			Labels: map[string]string{
-				"site":        sync.Spec.Site,
-				"environment": sync.Spec.BackupEnv,
+				"site":                sync.Spec.Site,
+				"environment":         sync.Spec.BackupEnv,
+				resticutils.SyncLabel: "1",
 			},
 		},
 		Spec: sync.Spec.BackupSpec,
@@ -149,9 +156,9 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	log.Infof("Synced Backup %s with status: %s", backup.ObjectMeta.Name, result)
 
 	status := extensionv1.SyncStatus{
-		BackupName:     backup.ObjectMeta.Name,
-		BackupPhase:    backup.Status.Phase,
-		StartTime:      backup.Status.StartTime,
+		BackupName:  backup.ObjectMeta.Name,
+		BackupPhase: backup.Status.Phase,
+		StartTime:   backup.Status.StartTime,
 	}
 
 	dc, err := r.OsClient.DeploymentConfigs(sync.ObjectMeta.Namespace).Get(fmt.Sprintf("node-%s", sync.Spec.RestoreEnv), metav1.GetOptions{})
