@@ -3,9 +3,6 @@ package restore
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
-	"time"
 
 	"github.com/go-test/deep"
 	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
@@ -16,6 +13,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -124,14 +123,18 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 		log.Info(fmt.Sprintf("Skipping restore %s because the backup %s failed", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
 		return reconcile.Result{}, nil
 	case v1.PhaseNew:
-		// Requeue the operation for 60 seconds if the backup is new.
-		return requeueAfterSeconds(60), nil
+		// Requeue the operation for 30 seconds if the backup is new.
+		log.Info(fmt.Sprintf("Requeueing restore %s because the backup %s is New", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
+		return resticutils.RequeueAfterSeconds(30), nil
 	case v1.PhaseInProgress:
-		// Requeue the operation for 30 seconds if the backup is still in progress.
-		return requeueAfterSeconds(30), nil
+		// Requeue the operation for 15 seconds if the backup is still in progress.
+		log.Info(fmt.Sprintf("Requeueing restore %s because the backup %s is In Progress", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
+		return resticutils.RequeueAfterSeconds(15), nil
 	}
+
 	// Catch-all for any other non Completed phases.
 	if backup.Status.Phase != v1.PhaseCompleted {
+		log.Info(fmt.Sprintf("Skipping restore %s because the backup %s is in an unknown state: %s", restore.ObjectMeta.Name, backup.ObjectMeta.Name, backup.Status.Phase))
 		return reconcile.Result{}, nil
 	}
 
@@ -232,12 +235,4 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 	log.Info("Reconcile finished")
 
 	return reconcile.Result{}, nil
-}
-
-// requeueAfterSeconds returns a reconcile.Result to requeue after seconds time.
-func requeueAfterSeconds(seconds int64) reconcile.Result {
-	return reconcile.Result{
-		Requeue:      true,
-		RequeueAfter: time.Duration(seconds) * time.Second,
-	}
 }

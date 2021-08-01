@@ -350,17 +350,19 @@
   version = "v3.9.0"
 
 [[projects]]
-  digest = "1:7da30d36edabf50fb5bc07f759991589c5ca72e75b3dd50fa58c57d94e96fd15"
+  digest = "1:290185f7fe88f02252212f1bd40bbf580a219d6c46afaf4445e5234aada9950c"
   name = "github.com/openshift/client-go"
   packages = [
+    "apps/clientset/versioned",
+    "apps/clientset/versioned/fake",
     "apps/clientset/versioned/scheme",
     "apps/clientset/versioned/typed/apps/v1",
+    "apps/clientset/versioned/typed/apps/v1/fake",
     "route/clientset/versioned/scheme",
     "route/clientset/versioned/typed/route/v1",
   ]
   pruneopts = "T"
-  revision = "1fa528d3be060e4c7178eb69e76d37cf7e699e3c"
-  version = "v3.9.0"
+  revision = "ccdcda4156765b47c39f3f4d9722b66e38f49934"
 
 [[projects]]
   digest = "1:e5d0bd87abc2781d14e274807a470acd180f0499f8bf5bb18606e9ec22ad9de9"
@@ -840,6 +842,7 @@
   name = "k8s.io/client-go"
   packages = [
     "discovery",
+    "discovery/fake",
     "dynamic",
     "kubernetes",
     "kubernetes/scheme",
@@ -1056,6 +1059,7 @@
     "github.com/onsi/gomega",
     "github.com/openshift/api/apps/v1",
     "github.com/openshift/api/route/v1",
+    "github.com/openshift/client-go/apps/clientset/versioned/fake",
     "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1",
     "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1",
     "github.com/pkg/errors",

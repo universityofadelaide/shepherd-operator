@@ -30,6 +30,10 @@ required = [
   name="sigs.k8s.io/controller-tools"
   version="v0.1.1"
 
+[[constraint]]
+  name="github.com/openshift/client-go"
+  revision="ccdcda4156765b47c39f3f4d9722b66e38f49934"
+
 # For dependency below: Refer to issue https://github.com/golang/dep/issues/1799
 [[override]]
 name = "gopkg.in/fsnotify.v1"
