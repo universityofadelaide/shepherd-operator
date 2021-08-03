@@ -215,8 +215,7 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 	} else {
 		if job.Status.Succeeded > 0 {
 			status.Phase = v1.PhaseCompleted
-		}
-		if job.Status.Failed > 0 {
+		} else if job.Status.Failed > 0 {
 			status.Phase = v1.PhaseFailed
 		}
 	}
