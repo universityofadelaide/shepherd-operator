@@ -111,6 +111,7 @@ type ReconcileSync struct {
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
 // +kubebuilder:rbac:groups=extension.shepherd,resources=syncs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=syncs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=extension.shepherd,resources=syncs/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=extension.shepherd,resources=backups/finalizers,verbs=get;list;watch;create;update;patch;delete
