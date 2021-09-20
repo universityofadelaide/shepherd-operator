@@ -162,7 +162,7 @@ func (r *ReconcileRestore) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	var params = resticutils.PodSpecParams{
 		CPU:         "500m",
-		Memory:      "1024Mi",
+		Memory:      "2048Mi",
 		ResticImage: "docker.io/restic/restic:0.9.5",
 		MySQLImage:  "skpr/mtk-mysql",
 		WorkingDir:  "/home/shepherd",
