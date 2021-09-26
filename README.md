@@ -96,3 +96,15 @@ To get started developing this operator, ensure you the following prerequisites:
 4. Run `make run` to compile the local workspace and run the operator. Keep it running for the next few steps.
 5. Backup an environment via the Shepherd UI.
 6. Run `oc get jobs` to check out the jobs that were created.
+
+## Deployment
+
+1. `docker login` to Docker Hub (hub.docker.com).
+2. Set the exnvironment (production in this case) project/namespace `export NAMESPACE=shepeherd-prd`.
+3. Build the image `make docker-build`.
+4. Push the image to Docker Hub `make docker-push`.
+5. Take note of the previous deployment `oc describe sts/shepherd-operator-controller-manager`
+6. Delete the pod and replace it with the new image `oc delete pod shepherd-operator-controller-manager-0`.
+7. Verify `oc logs -f shepherd-operator-controller-manager-0 -c manager`.
+8. Run an upgrade and check that it actually works.
+
