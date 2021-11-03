@@ -348,7 +348,10 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 			"/bin/sh", "-c",
 		},
 		Args: []string{
-			helper.TprintfMustParse(
+			helper.TprintfMustParse(a
+				"drush cdel core.extension module.media_entity || true && " +
+				"drush cdel core.extension module.entity || true && " +
+				"drush sqlq \"delete from \\`key_value\\` where collection = 'system.schema' and name = 'entity';\" && " +
 				"drush -r {{.WebDir}}/web cr && drush -r {{.WebDir}}/web -y updb && robo config:import-plus && drush -r {{.WebDir}}/web cr",
 				map[string]interface{}{
 					"WebDir": WebDirectory,
