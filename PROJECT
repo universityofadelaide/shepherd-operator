@@ -1,3 +1,44 @@
-version: "1"
 domain: shepherd
+layout:
+- go.kubebuilder.io/v3
+multigroup: true
+projectName: shepherd-operator
 repo: github.com/universityofadelaide/shepherd-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: shepherd
+  group: extension
+  kind: Backup
+  path: github.com/universityofadelaide/shepherd-operator/apis/extension/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: shepherd
+  group: extension
+  kind: Restore
+  path: github.com/universityofadelaide/shepherd-operator/apis/extension/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: shepherd
+  group: extension
+  kind: BackupScheduled
+  path: github.com/universityofadelaide/shepherd-operator/apis/extension/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: shepherd
+  group: extension
+  kind: Sync
+  path: github.com/universityofadelaide/shepherd-operator/apis/extension/v1
+  version: v1
+version: "3"
