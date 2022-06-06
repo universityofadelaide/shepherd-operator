@@ -18,289 +18,319 @@ package webhook
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"io"
+	"io/ioutil"
+	"net"
 	"net/http"
-	"path"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	apitypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	kscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/internal/httpserver"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
-	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/internal/cert"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/internal/cert/writer"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/types"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/internal/metrics"
 )
 
-// default interval for checking cert is 90 days (~3 months)
-var defaultCertRefreshInterval = 3 * 30 * 24 * time.Hour
-
-// ServerOptions are options for configuring an admission webhook server.
-type ServerOptions struct {
-	// Port is the port number that the server will serve.
-	// It will be defaulted to 443 if unspecified.
-	Port int32
-
-	// CertDir is the directory that contains the server key and certificate.
-	// If using FSCertWriter in Provisioner, the server itself will provision the certificate and
-	// store it in this directory.
-	// If using SecretCertWriter in Provisioner, the server will provision the certificate in a secret,
-	// the user is responsible to mount the secret to the this location for the server to consume.
-	CertDir string
-
-	// Client is a client defined in controller-runtime instead of a client-go client.
-	// It knows how to talk to a kubernetes cluster.
-	// Client will be injected by the manager if not set.
-	Client client.Client
-
-	// DisableWebhookConfigInstaller controls if the server will automatically create webhook related objects
-	// during bootstrapping. e.g. webhookConfiguration, service and secret.
-	// If false, the server will install the webhook config objects. It is defaulted to false.
-	DisableWebhookConfigInstaller *bool
-
-	// BootstrapOptions contains the options for bootstrapping the admission server.
-	*BootstrapOptions
-}
-
-// BootstrapOptions are options for bootstrapping an admission webhook server.
-type BootstrapOptions struct {
-	// MutatingWebhookConfigName is the name that used for creating the MutatingWebhookConfiguration object.
-	MutatingWebhookConfigName string
-	// ValidatingWebhookConfigName is the name that used for creating the ValidatingWebhookConfiguration object.
-	ValidatingWebhookConfigName string
-
-	// Secret is the location for storing the certificate for the admission server.
-	// The server should have permission to create a secret in the namespace.
-	// This is optional. If unspecified, it will write to the filesystem.
-	// It the secret already exists and is different from the desired, it will be replaced.
-	Secret *apitypes.NamespacedName
-
-	// Deprecated: Writer will not be used anywhere.
-	Writer io.Writer
-
-	// Service is k8s service fronting the webhook server pod(s).
-	// This field is optional. But one and only one of Service and Host need to be set.
-	// This maps to field .webhooks.getClientConfig.service
-	// https://github.com/kubernetes/api/blob/183f3326a9353bd6d41430fc80f96259331d029c/admissionregistration/v1beta1/types.go#L260
-	Service *Service
-	// Host is the host name of .webhooks.clientConfig.url
-	// https://github.com/kubernetes/api/blob/183f3326a9353bd6d41430fc80f96259331d029c/admissionregistration/v1beta1/types.go#L250
-	// This field is optional. But one and only one of Service and Host need to be set.
-	// If neither Service nor Host is unspecified, Host will be defaulted to "localhost".
-	Host *string
-
-	// certProvisioner is constructed using certGenerator and certWriter
-	certProvisioner *cert.Provisioner // nolint: structcheck
-
-	// err will be non-nil if there is an error occur during initialization.
-	err error // nolint: structcheck
-}
-
-// Service contains information for creating a service
-type Service struct {
-	// Name of the service
-	Name string
-	// Namespace of the service
-	Namespace string
-	// Selectors is the selector of the service.
-	// This must select the pods that runs this webhook server.
-	Selectors map[string]string
-}
+// DefaultPort is the default port that the webhook server serves.
+var DefaultPort = 9443
 
 // Server is an admission webhook server that can serve traffic and
 // generates related k8s resources for deploying.
+//
+// TLS is required for a webhook to be accessed by kubernetes, so
+// you must provide a CertName and KeyName or have valid cert/key
+// at the default locations (tls.crt and tls.key). If you do not
+// want to configure TLS (i.e for testing purposes) run an
+// admission.StandaloneWebhook in your own server.
 type Server struct {
-	// Name is the name of server
-	Name string
+	// Host is the address that the server will listen on.
+	// Defaults to "" - all addresses.
+	Host string
 
-	// ServerOptions contains options for configuring the admission server.
-	ServerOptions
+	// Port is the port number that the server will serve.
+	// It will be defaulted to 9443 if unspecified.
+	Port int
 
-	sMux *http.ServeMux
-	// registry maps a path to a http.Handler.
-	registry map[string]Webhook
+	// CertDir is the directory that contains the server key and certificate. The
+	// server key and certificate.
+	CertDir string
 
-	// mutatingWebhookConfiguration and validatingWebhookConfiguration are populated during server bootstrapping.
-	// They can be nil, if there is no webhook registered under it.
-	webhookConfigurations []runtime.Object
+	// CertName is the server certificate name. Defaults to tls.crt.
+	CertName string
 
-	// manager is the manager that this webhook server will be registered.
-	manager manager.Manager
+	// KeyName is the server key name. Defaults to tls.key.
+	KeyName string
 
-	// httpServer is the actual server that serves the traffic.
-	httpServer *http.Server
+	// ClientCAName is the CA certificate name which server used to verify remote(client)'s certificate.
+	// Defaults to "", which means server does not verify client's certificate.
+	ClientCAName string
 
-	once sync.Once
+	// TLSVersion is the minimum version of TLS supported. Accepts
+	// "", "1.0", "1.1", "1.2" and "1.3" only ("" is equivalent to "1.0" for backwards compatibility)
+	TLSMinVersion string
+
+	// WebhookMux is the multiplexer that handles different webhooks.
+	WebhookMux *http.ServeMux
+
+	// webhooks keep track of all registered webhooks for dependency injection,
+	// and to provide better panic messages on duplicate webhook registration.
+	webhooks map[string]http.Handler
+
+	// setFields allows injecting dependencies from an external source
+	setFields inject.Func
+
+	// defaultingOnce ensures that the default fields are only ever set once.
+	defaultingOnce sync.Once
+
+	// started is set to true immediately before the server is started
+	// and thus can be used to check if the server has been started
+	started bool
+
+	// mu protects access to the webhook map & setFields for Start, Register, etc
+	mu sync.Mutex
 }
 
-// Webhook defines the basics that a webhook should support.
-type Webhook interface {
-	// GetName returns the name of the webhook.
-	GetName() string
-	// GetPath returns the path that the webhook registered.
-	GetPath() string
-	// GetType returns the Type of the webhook.
-	// e.g. mutating or validating
-	GetType() types.WebhookType
-	// Handler returns a http.Handler for the webhook.
-	Handler() http.Handler
-	// Validate validates if the webhook itself is valid.
-	// If invalid, a non-nil error will be returned.
-	Validate() error
-}
-
-// NewServer creates a new admission webhook server.
-func NewServer(name string, mgr manager.Manager, options ServerOptions) (*Server, error) {
-	as := &Server{
-		Name:          name,
-		sMux:          http.NewServeMux(),
-		registry:      map[string]Webhook{},
-		ServerOptions: options,
-		manager:       mgr,
+// setDefaults does defaulting for the Server.
+func (s *Server) setDefaults() {
+	s.webhooks = map[string]http.Handler{}
+	if s.WebhookMux == nil {
+		s.WebhookMux = http.NewServeMux()
 	}
 
-	return as, nil
+	if s.Port <= 0 {
+		s.Port = DefaultPort
+	}
+
+	if len(s.CertDir) == 0 {
+		s.CertDir = filepath.Join(os.TempDir(), "k8s-webhook-server", "serving-certs")
+	}
+
+	if len(s.CertName) == 0 {
+		s.CertName = "tls.crt"
+	}
+
+	if len(s.KeyName) == 0 {
+		s.KeyName = "tls.key"
+	}
 }
 
-// Register validates and registers webhook(s) in the server
-func (s *Server) Register(webhooks ...Webhook) error {
-	for i, webhook := range webhooks {
-		// validate the webhook before registering it.
-		err := webhook.Validate()
-		if err != nil {
+// NeedLeaderElection implements the LeaderElectionRunnable interface, which indicates
+// the webhook server doesn't need leader election.
+func (*Server) NeedLeaderElection() bool {
+	return false
+}
+
+// Register marks the given webhook as being served at the given path.
+// It panics if two hooks are registered on the same path.
+func (s *Server) Register(path string, hook http.Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.defaultingOnce.Do(s.setDefaults)
+	if _, found := s.webhooks[path]; found {
+		panic(fmt.Errorf("can't register duplicate path: %v", path))
+	}
+	// TODO(directxman12): call setfields if we've already started the server
+	s.webhooks[path] = hook
+	s.WebhookMux.Handle(path, metrics.InstrumentedHook(path, hook))
+
+	regLog := log.WithValues("path", path)
+	regLog.Info("Registering webhook")
+
+	// we've already been "started", inject dependencies here.
+	// Otherwise, InjectFunc will do this for us later.
+	if s.setFields != nil {
+		if err := s.setFields(hook); err != nil {
+			// TODO(directxman12): swallowing this error isn't great, but we'd have to
+			// change the signature to fix that
+			regLog.Error(err, "unable to inject fields into webhook during registration")
+		}
+
+		baseHookLog := log.WithName("webhooks")
+
+		// NB(directxman12): we don't propagate this further by wrapping setFields because it's
+		// unclear if this is how we want to deal with log propagation.  In this specific instance,
+		// we want to be able to pass a logger to webhooks because they don't know their own path.
+		if _, err := inject.LoggerInto(baseHookLog.WithValues("webhook", path), hook); err != nil {
+			regLog.Error(err, "unable to logger into webhook during registration")
+		}
+	}
+}
+
+// StartStandalone runs a webhook server without
+// a controller manager.
+func (s *Server) StartStandalone(ctx context.Context, scheme *runtime.Scheme) error {
+	// Use the Kubernetes client-go scheme if none is specified
+	if scheme == nil {
+		scheme = kscheme.Scheme
+	}
+
+	if err := s.InjectFunc(func(i interface{}) error {
+		if _, err := inject.SchemeInto(scheme, i); err != nil {
 			return err
 		}
-		_, found := s.registry[webhook.GetPath()]
-		if found {
-			return fmt.Errorf("can't register duplicate path: %v", webhook.GetPath())
-		}
-		s.registry[webhook.GetPath()] = webhooks[i]
-		s.sMux.Handle(webhook.GetPath(), webhook.Handler())
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	// Lazily add Server to manager.
-	// Because the all webhook handlers to be in place, so we can inject the things they need.
-	return s.manager.Add(s)
+	return s.Start(ctx)
 }
 
-// Handle registers a http.Handler for the given pattern.
-func (s *Server) Handle(pattern string, handler http.Handler) {
-	s.sMux.Handle(pattern, handler)
+// tlsVersion converts from human-readable TLS version (for example "1.1")
+// to the values accepted by tls.Config (for example 0x301).
+func tlsVersion(version string) (uint16, error) {
+	switch version {
+	// default is previous behaviour
+	case "":
+		return tls.VersionTLS10, nil
+	case "1.0":
+		return tls.VersionTLS10, nil
+	case "1.1":
+		return tls.VersionTLS11, nil
+	case "1.2":
+		return tls.VersionTLS12, nil
+	case "1.3":
+		return tls.VersionTLS13, nil
+	default:
+		return 0, fmt.Errorf("invalid TLSMinVersion %v: expects 1.0, 1.1, 1.2, 1.3 or empty", version)
+	}
 }
-
-var _ manager.Runnable = &Server{}
 
 // Start runs the server.
 // It will install the webhook related resources depend on the server configuration.
-func (s *Server) Start(stop <-chan struct{}) error {
-	s.once.Do(s.setDefault)
-	if s.err != nil {
-		return s.err
+func (s *Server) Start(ctx context.Context) error {
+	s.defaultingOnce.Do(s.setDefaults)
+
+	baseHookLog := log.WithName("webhooks")
+	baseHookLog.Info("Starting webhook server")
+
+	certPath := filepath.Join(s.CertDir, s.CertName)
+	keyPath := filepath.Join(s.CertDir, s.KeyName)
+
+	certWatcher, err := certwatcher.New(certPath, keyPath)
+	if err != nil {
+		return err
 	}
 
-	if s.DisableWebhookConfigInstaller != nil && !*s.DisableWebhookConfigInstaller {
-		log.Info("installing webhook configuration in cluster")
-		err := s.InstallWebhookManifests()
+	go func() {
+		if err := certWatcher.Start(ctx); err != nil {
+			log.Error(err, "certificate watcher error")
+		}
+	}()
+
+	tlsMinVersion, err := tlsVersion(s.TLSMinVersion)
+	if err != nil {
+		return err
+	}
+
+	cfg := &tls.Config{ //nolint:gosec
+		NextProtos:     []string{"h2"},
+		GetCertificate: certWatcher.GetCertificate,
+		MinVersion:     tlsMinVersion,
+	}
+
+	// load CA to verify client certificate
+	if s.ClientCAName != "" {
+		certPool := x509.NewCertPool()
+		clientCABytes, err := ioutil.ReadFile(filepath.Join(s.CertDir, s.ClientCAName))
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read client CA cert: %v", err)
 		}
-	} else {
-		log.Info("webhook installer is disabled")
+
+		ok := certPool.AppendCertsFromPEM(clientCABytes)
+		if !ok {
+			return fmt.Errorf("failed to append client CA cert to CA pool")
+		}
+
+		cfg.ClientCAs = certPool
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
-	return s.run(stop)
-}
-
-func (s *Server) run(stop <-chan struct{}) error { // nolint: gocyclo
-	errCh := make(chan error)
-	serveFn := func() {
-		s.httpServer = &http.Server{
-			Addr:    fmt.Sprintf(":%v", s.Port),
-			Handler: s.sMux,
-		}
-		log.Info("starting the webhook server.")
-		errCh <- s.httpServer.ListenAndServeTLS(path.Join(s.CertDir, writer.ServerCertName), path.Join(s.CertDir, writer.ServerKeyName))
-	}
-
-	shutdownHappend := false
-	timer := time.Tick(wait.Jitter(defaultCertRefreshInterval, 0.1))
-	go serveFn()
-	for {
-		select {
-		case <-timer:
-			changed, err := s.RefreshCert()
-			if err != nil {
-				log.Error(err, "encountering error when refreshing the certificate")
-				return err
-			}
-			if !changed {
-				log.Info("no need to reload the certificates.")
-				continue
-			}
-			log.Info("server is shutting down to reload the certificates.")
-			shutdownHappend = true
-			err = s.httpServer.Shutdown(context.Background())
-			if err != nil {
-				log.Error(err, "encountering error when shutting down")
-				return err
-			}
-			timer = time.Tick(wait.Jitter(defaultCertRefreshInterval, 0.1))
-			go serveFn()
-		case <-stop:
-			return s.httpServer.Shutdown(context.Background())
-		case e := <-errCh:
-			// Don't exit when getting an http.ErrServerClosed error due to restarting the server.
-			if shutdownHappend && e == http.ErrServerClosed {
-				shutdownHappend = false
-			} else if e != nil {
-				log.Error(e, "server returns an unexpected error")
-				return e
-			}
-		}
-	}
-}
-
-// RefreshCert refreshes the certificate using Server's Provisioner if the certificate is expiring.
-func (s *Server) RefreshCert() (bool, error) {
-	cc, err := s.getClientConfig()
+	listener, err := tls.Listen("tcp", net.JoinHostPort(s.Host, strconv.Itoa(s.Port)), cfg)
 	if err != nil {
-		return false, err
-	}
-	changed, err := s.certProvisioner.Provision(cert.Options{
-		ClientConfig: cc,
-		Objects:      s.webhookConfigurations,
-	})
-	if err != nil {
-		return false, err
+		return err
 	}
 
-	return changed, batchCreateOrReplace(s.Client, s.webhookConfigurations...)
-}
+	log.Info("Serving webhook server", "host", s.Host, "port", s.Port)
 
-var _ inject.Client = &Server{}
+	srv := httpserver.New(s.WebhookMux)
 
-// InjectClient injects the client into the server
-func (s *Server) InjectClient(c client.Client) error {
-	s.Client = c
-	for _, wh := range s.registry {
-		if _, err := inject.ClientInto(c, wh.Handler()); err != nil {
-			return err
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		log.Info("shutting down webhook server")
+
+		// TODO: use a context with reasonable timeout
+		if err := srv.Shutdown(context.Background()); err != nil {
+			// Error from closing listeners, or context timeout
+			log.Error(err, "error shutting down the HTTP server")
 		}
+		close(idleConnsClosed)
+	}()
+
+	s.mu.Lock()
+	s.started = true
+	s.mu.Unlock()
+	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
+		return err
 	}
+
+	<-idleConnsClosed
 	return nil
 }
 
-var _ inject.Decoder = &Server{}
+// StartedChecker returns an healthz.Checker which is healthy after the
+// server has been started.
+func (s *Server) StartedChecker() healthz.Checker {
+	config := &tls.Config{
+		InsecureSkipVerify: true, // nolint:gosec // config is used to connect to our own webhook port.
+	}
+	return func(req *http.Request) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-// InjectDecoder injects the client into the server
-func (s *Server) InjectDecoder(d atypes.Decoder) error {
-	for _, wh := range s.registry {
-		if _, err := inject.DecoderInto(d, wh.Handler()); err != nil {
+		if !s.started {
+			return fmt.Errorf("webhook server has not been started yet")
+		}
+
+		d := &net.Dialer{Timeout: 10 * time.Second}
+		conn, err := tls.DialWithDialer(d, "tcp", net.JoinHostPort(s.Host, strconv.Itoa(s.Port)), config)
+		if err != nil {
+			return fmt.Errorf("webhook server is not reachable: %v", err)
+		}
+
+		if err := conn.Close(); err != nil {
+			return fmt.Errorf("webhook server is not reachable: closing connection: %v", err)
+		}
+
+		return nil
+	}
+}
+
+// InjectFunc injects the field setter into the server.
+func (s *Server) InjectFunc(f inject.Func) error {
+	s.setFields = f
+
+	// inject fields here that weren't injected in Register because we didn't have setFields yet.
+	baseHookLog := log.WithName("webhooks")
+	for hookPath, webhook := range s.webhooks {
+		if err := s.setFields(webhook); err != nil {
+			return err
+		}
+
+		// NB(directxman12): we don't propagate this further by wrapping setFields because it's
+		// unclear if this is how we want to deal with log propagation.  In this specific instance,
+		// we want to be able to pass a logger to webhooks because they don't know their own path.
+		if _, err := inject.LoggerInto(baseHookLog.WithValues("webhook", hookPath), webhook); err != nil {
 			return err
 		}
 	}

@@ -16,14 +16,4 @@ Please see https://git.k8s.io/community/CLA.md for more info
 
 ## Test locally
 
-1. Setup tools
-    ```bash
-    $ go get -u github.com/golang/dep/cmd/dep
-    $ go get -u gopkg.in/alecthomas/gometalinter.v2 
-    $ gometalinter.v2 --install # if can't load package, refer: https://github.com/alecthomas/gometalinter/issues/404
-    ```
-1. Test
-    ```bash
-    TRACE=1 ./hack/check-everything.sh
-    ```
-
+Run the command `make test` to test the changes locally.

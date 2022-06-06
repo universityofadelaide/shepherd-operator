@@ -14,9 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package builder provides wraps other controller-runtime libraries and exposes simple
+// Package builder wraps other controller-runtime libraries and exposes simple
 // patterns for building common Controllers.
 //
 // Projects built with the builder package can trivially be rebased on top of the underlying
 // packages if the project requires more customized behavior in the future.
 package builder
+
+import (
+	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
+)
+
+var log = logf.RuntimeLog.WithName("builder")
