@@ -154,7 +154,7 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 		},
 		Spec: extensionv1.BackupScheduledSpec{
 			Schedule: shpmetav1.ScheduledSpec{
-				CronTab: "a b * * * * *",
+				CronTab: "a b * * *",
 			},
 		},
 	}
@@ -176,7 +176,7 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
-	assert.Contains(t, err.Error(), "expected exactly 5 fields, found 7")
+	assert.Error(t, err)
 }
 
 func TestReconcileInvalidDeadline(t *testing.T) {
@@ -192,7 +192,7 @@ func TestReconcileInvalidDeadline(t *testing.T) {
 		},
 		Spec: extensionv1.BackupScheduledSpec{
 			Schedule: shpmetav1.ScheduledSpec{
-				CronTab: "0 0 * * * * *",
+				CronTab: "0 0 * * *",
 			},
 		},
 	}
@@ -214,7 +214,7 @@ func TestReconcileInvalidDeadline(t *testing.T) {
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
-	assert.Contains(t, err.Error(), "expected exactly 5 fields, found 7")
+	assert.Contains(t, err.Error(), "too many missed start times")
 }
 
 func TestReconcileRetention(t *testing.T) {

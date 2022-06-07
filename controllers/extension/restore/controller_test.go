@@ -15,6 +15,7 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	mockevents "github.com/universityofadelaide/shepherd-operator/internal/events/mock"
+	"github.com/universityofadelaide/shepherd-operator/internal/restic"
 )
 
 func TestReconcile(t *testing.T) {
@@ -39,6 +40,16 @@ func TestReconcile(t *testing.T) {
 		Client:   fake.NewFakeClient(instance),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
+		Params: Params{
+			PodSpec: restic.PodSpecParams{
+				CPU:         "500m",
+				Memory:      "512Mi",
+				ResticImage: "docker.io/restic/restic:0.9.5",
+				MySQLImage:  "skpr/mtk-mysql",
+				WorkingDir:  "/home/shepherd",
+				Tags:        []string{},
+			},
+		},
 	}
 
 	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
