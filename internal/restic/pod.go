@@ -356,9 +356,10 @@ func PodSpecRestore(restore *extensionv1.Restore, dc *osv1.DeploymentConfig, res
 		VolumeMounts: dcVolumeMounts,
 	})
 
-	for i, _ := range initContainers {
+	for i := range initContainers {
 		initContainers[i] = WrapContainer(initContainers[i], siteId, restore.ObjectMeta.Namespace)
 	}
+
 	spec := corev1.PodSpec{
 		RestartPolicy:  corev1.RestartPolicyNever,
 		InitContainers: initContainers,

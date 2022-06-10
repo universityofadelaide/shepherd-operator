@@ -21,8 +21,11 @@ import (
 )
 
 func TestReconcile(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
-	batchv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
+
+	err = batchv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	instance := &extensionv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{
@@ -39,7 +42,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	rd := &Reconciler{
-		Client:   fake.NewFakeClient(instance),
+		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
 		Params: Params{
@@ -54,7 +57,7 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
-	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
+	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
 	assert.Nil(t, err)
@@ -65,7 +68,8 @@ func TestReconcile(t *testing.T) {
 }
 
 func TestReconcileDelete(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	deletionTimestamp := &metav1.Time{}
 	deletionTimestamp.Time = time.Now()
@@ -88,7 +92,7 @@ func TestReconcileDelete(t *testing.T) {
 		Namespace: instance.ObjectMeta.Namespace,
 	}
 	rd := &Reconciler{
-		Client:   fake.NewFakeClient(instance),
+		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
 		Params: Params{
@@ -103,7 +107,7 @@ func TestReconcileDelete(t *testing.T) {
 		},
 	}
 
-	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
+	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: backupQuery,
 	})
 	assert.Nil(t, err)

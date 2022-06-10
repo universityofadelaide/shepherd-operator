@@ -34,7 +34,8 @@ import (
 )
 
 func TestReconcile(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	retentionMaxNumber := 2
 	startDeadline := int64(60)
@@ -67,7 +68,7 @@ func TestReconcile(t *testing.T) {
 	assert.Nil(t, err)
 
 	rd := &Reconciler{
-		Client:   fake.NewFakeClient(instance),
+		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Clock:    c,
 		Recorder: mockevents.New(),
@@ -84,7 +85,8 @@ func TestReconcile(t *testing.T) {
 }
 
 func TestReconcileNoLabels(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	instance := &extensionv1.BackupScheduled{
 		ObjectMeta: metav1.ObjectMeta{
@@ -100,19 +102,20 @@ func TestReconcileNoLabels(t *testing.T) {
 	}
 
 	rd := &Reconciler{
-		Client:   fake.NewFakeClient(instance),
+		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
 	}
 
-	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
+	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
 	assert.Error(t, err, "BackupScheduled doesn't have a site label.")
 }
 
 func TestReconcileNoSchedule(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	instance := &extensionv1.BackupScheduled{
 		ObjectMeta: metav1.ObjectMeta{
@@ -131,18 +134,19 @@ func TestReconcileNoSchedule(t *testing.T) {
 	}
 
 	rd := &Reconciler{
-		Client: fake.NewFakeClient(instance),
+		Client: fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme: scheme.Scheme,
 	}
 
-	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
+	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
 	assert.Error(t, err, "BackupScheduled doesn't have a schedule.")
 }
 
 func TestReconcileInvalidSchedule(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	instance := &extensionv1.BackupScheduled{
 		ObjectMeta: metav1.ObjectMeta{
@@ -168,7 +172,7 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 	c, err := clock.New("2020-04-02T00:00:03Z")
 	assert.Nil(t, err)
 	rd := &Reconciler{
-		Client: fake.NewFakeClient(instance),
+		Client: fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme: scheme.Scheme,
 		Clock:  c,
 	}
@@ -180,7 +184,8 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 }
 
 func TestReconcileInvalidDeadline(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	instance := &extensionv1.BackupScheduled{
 		ObjectMeta: metav1.ObjectMeta{
@@ -206,7 +211,7 @@ func TestReconcileInvalidDeadline(t *testing.T) {
 	c, err := clock.New("2020-04-02T00:00:03Z")
 	assert.Nil(t, err)
 	rd := &Reconciler{
-		Client: fake.NewFakeClient(instance),
+		Client: fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme: scheme.Scheme,
 		Clock:  c,
 	}
@@ -218,7 +223,8 @@ func TestReconcileInvalidDeadline(t *testing.T) {
 }
 
 func TestReconcileRetention(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	retentionMaxNumber := 3
 	startDeadline := int64(60)
@@ -250,7 +256,7 @@ func TestReconcileRetention(t *testing.T) {
 	recorder := mockevents.New()
 
 	rd := &Reconciler{
-		Client:   fake.NewFakeClient(instance),
+		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: recorder,
 	}

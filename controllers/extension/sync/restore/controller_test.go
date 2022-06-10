@@ -18,7 +18,8 @@ import (
 )
 
 func TestReconcile(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	now := metav1.Now()
 
@@ -105,12 +106,12 @@ func TestReconcile(t *testing.T) {
 	}
 
 	rd := &Reconciler{
-		Client:    fake.NewFakeClient(instance),
+		Client:    fake.NewClientBuilder().WithObjects(instance).Build(),
 		OpenShift: osclient.NewSimpleClientset(deploymentconfig).AppsV1(),
 		Scheme:    scheme.Scheme,
 	}
 
-	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
+	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
 	assert.Nil(t, err)

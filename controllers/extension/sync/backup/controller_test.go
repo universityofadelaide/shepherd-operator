@@ -18,7 +18,8 @@ import (
 )
 
 func TestReconcile(t *testing.T) {
-	extensionv1.AddToScheme(scheme.Scheme)
+	err := extensionv1.AddToScheme(scheme.Scheme)
+	assert.Nil(t, err)
 
 	instance := &extensionv1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
@@ -81,12 +82,12 @@ func TestReconcile(t *testing.T) {
 	}
 
 	rd := &Reconciler{
-		Client:   fake.NewFakeClient(instance),
+		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
 	}
 
-	_, err := rd.Reconcile(context.TODO(), reconcile.Request{
+	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: query,
 	})
 	assert.Nil(t, err)
