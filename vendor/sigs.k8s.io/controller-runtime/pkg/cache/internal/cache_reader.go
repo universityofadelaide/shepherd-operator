@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -29,24 +29,35 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/tools/cache"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/internal/objectutil"
 )
 
-// CacheReader is a CacheReader
+// CacheReader is a client.Reader.
 var _ client.Reader = &CacheReader{}
 
-// CacheReader wraps a cache.Index to implement the client.CacheReader interface for a single type
+// CacheReader wraps a cache.Index to implement the client.CacheReader interface for a single type.
 type CacheReader struct {
 	// indexer is the underlying indexer wrapped by this cache.
 	indexer cache.Indexer
 
 	// groupVersionKind is the group-version-kind of the resource.
 	groupVersionKind schema.GroupVersionKind
+
+	// scopeName is the scope of the resource (namespaced or cluster-scoped).
+	scopeName apimeta.RESTScopeName
+
+	// disableDeepCopy indicates not to deep copy objects during get or list objects.
+	// Be very careful with this, when enabled you must DeepCopy any object before mutating it,
+	// otherwise you will mutate the object in the cache.
+	disableDeepCopy bool
 }
 
-// Get checks the indexer for the object and writes a copy of it if found
-func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out runtime.Object) error {
+// Get checks the indexer for the object and writes a copy of it if found.
+func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out client.Object) error {
+	if c.scopeName == apimeta.RESTScopeNameRoot {
+		key.Namespace = ""
+	}
 	storeKey := objectKeyToStoreKey(key)
 
 	// Lookup the object from the indexer cache
@@ -58,7 +69,7 @@ func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out runtime.O
 	// Not found, return an error
 	if !exists {
 		// Resource gets transformed into Kind in the error anyway, so this is fine
-		return errors.NewNotFound(schema.GroupResource{
+		return apierrors.NewNotFound(schema.GroupResource{
 			Group:    c.groupVersionKind.Group,
 			Resource: c.groupVersionKind.Kind,
 		}, key.Name)
@@ -70,9 +81,13 @@ func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out runtime.O
 		return fmt.Errorf("cache contained %T, which is not an Object", obj)
 	}
 
-	// deep copy to avoid mutating cache
-	// TODO(directxman12): revisit the decision to always deepcopy
-	obj = obj.(runtime.Object).DeepCopyObject()
+	if c.disableDeepCopy {
+		// skip deep copy which might be unsafe
+		// you must DeepCopy any object before mutating it outside
+	} else {
+		// deep copy to avoid mutating cache
+		obj = obj.(runtime.Object).DeepCopyObject()
+	}
 
 	// Copy the value of the item in the cache to the returned value
 	// TODO(directxman12): this is a terrible hack, pls fix (we should have deepcopyinto)
@@ -82,64 +97,82 @@ func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out runtime.O
 		return fmt.Errorf("cache had type %s, but %s was asked for", objVal.Type(), outVal.Type())
 	}
 	reflect.Indirect(outVal).Set(reflect.Indirect(objVal))
-	out.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+	if !c.disableDeepCopy {
+		out.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+	}
 
 	return nil
 }
 
-// List lists items out of the indexer and writes them to out
-func (c *CacheReader) List(_ context.Context, opts *client.ListOptions, out runtime.Object) error {
+// List lists items out of the indexer and writes them to out.
+func (c *CacheReader) List(_ context.Context, out client.ObjectList, opts ...client.ListOption) error {
 	var objs []interface{}
 	var err error
 
-	if opts != nil && opts.FieldSelector != nil {
+	listOpts := client.ListOptions{}
+	listOpts.ApplyOptions(opts)
+
+	switch {
+	case listOpts.FieldSelector != nil:
 		// TODO(directxman12): support more complicated field selectors by
-		// combining multiple indicies, GetIndexers, etc
-		field, val, requiresExact := requiresExactMatch(opts.FieldSelector)
+		// combining multiple indices, GetIndexers, etc
+		field, val, requiresExact := requiresExactMatch(listOpts.FieldSelector)
 		if !requiresExact {
 			return fmt.Errorf("non-exact field matches are not supported by the cache")
 		}
 		// list all objects by the field selector.  If this is namespaced and we have one, ask for the
 		// namespaced index key.  Otherwise, ask for the non-namespaced variant by using the fake "all namespaces"
 		// namespace.
-		objs, err = c.indexer.ByIndex(FieldIndexName(field), KeyToNamespacedKey(opts.Namespace, val))
-	} else if opts != nil && opts.Namespace != "" {
-		objs, err = c.indexer.ByIndex(cache.NamespaceIndex, opts.Namespace)
-	} else {
+		objs, err = c.indexer.ByIndex(FieldIndexName(field), KeyToNamespacedKey(listOpts.Namespace, val))
+	case listOpts.Namespace != "":
+		objs, err = c.indexer.ByIndex(cache.NamespaceIndex, listOpts.Namespace)
+	default:
 		objs = c.indexer.List()
 	}
 	if err != nil {
 		return err
 	}
 	var labelSel labels.Selector
-	if opts != nil && opts.LabelSelector != nil {
-		labelSel = opts.LabelSelector
+	if listOpts.LabelSelector != nil {
+		labelSel = listOpts.LabelSelector
 	}
 
-	filteredItems, err := c.filterListItems(objs, labelSel)
-	if err != nil {
-		return err
-	}
+	limitSet := listOpts.Limit > 0
 
-	return apimeta.SetList(out, filteredItems)
-}
-
-func (c *CacheReader) filterListItems(objs []interface{}, labelSel labels.Selector) ([]runtime.Object, error) {
 	runtimeObjs := make([]runtime.Object, 0, len(objs))
 	for _, item := range objs {
+		// if the Limit option is set and the number of items
+		// listed exceeds this limit, then stop reading.
+		if limitSet && int64(len(runtimeObjs)) >= listOpts.Limit {
+			break
+		}
 		obj, isObj := item.(runtime.Object)
 		if !isObj {
-			return nil, fmt.Errorf("cache contained %T, which is not an Object", obj)
+			return fmt.Errorf("cache contained %T, which is not an Object", obj)
 		}
-		runtimeObjs = append(runtimeObjs, obj)
-	}
+		meta, err := apimeta.Accessor(obj)
+		if err != nil {
+			return err
+		}
+		if labelSel != nil {
+			lbls := labels.Set(meta.GetLabels())
+			if !labelSel.Matches(lbls) {
+				continue
+			}
+		}
 
-	filteredItems, err := objectutil.FilterWithLabels(runtimeObjs, labelSel)
-	if err != nil {
-		return nil, err
+		var outObj runtime.Object
+		if c.disableDeepCopy {
+			// skip deep copy which might be unsafe
+			// you must DeepCopy any object before mutating it outside
+			outObj = obj
+		} else {
+			outObj = obj.DeepCopyObject()
+			outObj.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+		}
+		runtimeObjs = append(runtimeObjs, outObj)
 	}
-
-	return filteredItems, nil
+	return apimeta.SetList(out, runtimeObjs)
 }
 
 // objectKeyToStorageKey converts an object key to store key.
@@ -172,7 +205,7 @@ func FieldIndexName(field string) string {
 	return "field:" + field
 }
 
-// noNamespaceNamespace is used as the "namespace" when we want to list across all namespaces
+// noNamespaceNamespace is used as the "namespace" when we want to list across all namespaces.
 const allNamespacesNamespace = "__all_namespaces"
 
 // KeyToNamespacedKey prefixes the given index key with a namespace
