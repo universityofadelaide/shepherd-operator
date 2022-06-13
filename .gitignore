@@ -25,3 +25,4 @@ migration/migration
 *~
 config/deploy.yaml
 *.yaml-e
+/.kube
