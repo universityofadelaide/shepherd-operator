@@ -1,6 +1,21 @@
 apiVersion: extension.shepherd/v1
 kind: Backup
 metadata:
-  name: backup-sample
+  name: node-123-backup-xyz
+  labels:
+    site: 456
+    environment: 123
 spec:
-  # TODO(user): Add fields here
+  volumes:
+    shared:
+      claimName: node-123-shared
+  mysql:
+    default:
+      secret:
+        name: node-123
+        keys:
+          username: DATABASE_USER
+          password: DATABASE_PASSWORD
+          database: DATABASE_NAME
+          hostname: DATABASE_HOST
+          port: DATABASE_PORT

@@ -1,6 +1,22 @@
 apiVersion: extension.shepherd/v1
 kind: Restore
 metadata:
-  name: restore-sample
+  name: test-restore
+  labels:
+    site: '123'
+    environment: 123
 spec:
-  # TODO(user): Add fields here
+  backupName: abcd969xcz
+  volumes:
+    shared:
+      claimName: node-123-shared
+  mysql:
+    default:
+      secret:
+        name: node-123
+        keys:
+          username: DATABASE_USER
+          password: DATABASE_PASSWORD
+          database: DATABASE_NAME
+          hostname: DATABASE_HOST
+          port: DATABASE_PORT
