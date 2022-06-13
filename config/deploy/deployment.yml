@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        control-plane: controller-manager
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        image: ghcr.io/universityofadelaide/shepherd-operator:latest
+        name: manager
+        env:
+          - name: SHEPHERD_OPERATOR_BACKUP_CPU
+            value: "500m"
+          - name: SHEPHERD_OPERATOR_BACKUP_MEMORY
+            value: "512Mi"
+          - name: SHEPHERD_OPERATOR_BACKUP_RESTIC_IMAGE
+            value: "docker.io/restic/restic:0.9.5"
+          - name: SHEPHERD_OPERATOR_BACKUP_MYSQL_IMAGE
+            value: "skpr/mtk-mysql"
+          - name: SHEPHERD_OPERATOR_BACKUP_WORKING_DIR
+            value: "/home/shepherd"
+          - name: SHEPHERD_OPERATOR_RESTORE_CPU
+            value: "500m"
+          - name: SHEPHERD_OPERATOR_RESTORE_MEMORY
+            value: "512Mi"
+          - name: SHEPHERD_OPERATOR_RESTORE_RESTIC_IMAGE
+            value: "docker.io/restic/restic:0.9.5"
+          - name: SHEPHERD_OPERATOR_RESTORE_MYSQL_IMAGE
+            value: "skpr/mtk-mysql"
+          - name: SHEPHERD_OPERATOR_RESTORE_WORKING_DIR
+            value: "/home/shepherd"
+        securityContext:
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        imagePullSecrets:
+          - name: dockerconfigjson-github-com
+      serviceAccountName: controller-manager
+      terminationGracePeriodSeconds: 10
