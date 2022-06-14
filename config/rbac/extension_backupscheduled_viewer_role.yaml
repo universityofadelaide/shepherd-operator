@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: backupscheduled-viewer-role
+  name: shepherd-operator-backupscheduled-viewer
 rules:
 - apiGroups:
   - extension.shepherd

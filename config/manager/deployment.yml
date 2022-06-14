@@ -68,7 +68,7 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-        imagePullSecrets:
-          - name: dockerconfigjson-github-com
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
+      imagePullSecrets:
+        - name: dockerconfigjson-github-com
