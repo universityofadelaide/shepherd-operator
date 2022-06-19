@@ -51,29 +51,70 @@ status:
 
 ## Containers
 
-TODO
+```bash
+$ docker pull ghcr.io/universityofadelaide/shepherd-operator:latest
+```
 
-## Cluster Setup
+## Deploy
 
-1. Configure your namespace as required. Used for RBAC rules and defaults to 'myproject' (for local development).
-    ```
-    export NAMESPACE=shepherd-dev
-    make kustomize
-    ```
+This approach can be used for both production deployments and local develop on [Shepherd](https://github.com/universityofadelaide/shepherd)
 
-2. Install the CRD and RBAC.
-    ```
-    make install
-    ```
-3. Configure RBAC rules for accounts which should have access to create Backup/Restore objects (i.e. shepherd service account)
-    ```
-    oc create clusterrole shepherd-backups --verb=get,list,create,update,delete --resource=backups,restores,syncs
-    oc adm policy add-cluster-role-to-user shepherd-backups --serviceaccount=shepherd
-    ```
+1. Generate Github Token
 
-## Development
+Create new Github Personal Access Token with `read:packages` scope.
 
-The codebase is written in Go and uses the Kubebuilder framework. 
+https://github.com/settings/tokens/new
+
+Update the [secret manifest](config/manager/secret.yml) to contain a base64 string using the following command:
+
+```bash
+echo -n <your-github-username>:<TOKEN> | base64
+```
+
+2. Create Namespace
+
+```bash
+oc apply -f config/manager/namespace.yml
+```
+
+4. Apply CustomerResourceDefinitions
+
+```bash
+oc apply -f config/crd/bases/
+
+```
+
+5. Apply RBAC Policies
+
+```bash
+oc apply -f config/rbac/
+```
+
+6. Apply Deployment Manifests
+
+```bash
+oc apply -f config/manager/deploy.yml
+```
+
+## Local Development
+
+1. Setup Permissions
+
+```bash
+oc apply -f config/manager/namespace.yml
+oc apply -f config/crd/bases/
+oc apply -f config/rbac/
+```
+
+2. Run the Operator
+
+```
+make run
+```
+
+## Resources
+
+The codebase is written in Go and uses the Kubebuilder framework.
 
 * [Getting Started with Go](https://github.com/alco/gostart)
 * [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder)
@@ -81,30 +122,3 @@ The codebase is written in Go and uses the Kubebuilder framework.
 The core logic of this operator is contained in:
 - [pkg/controller/backup/backup_controller.go](pkg/controller/backup/backup_controller.go) in the function `Reconcile()`.
 - [pkg/controller/restore/restore_controller.go](pkg/controller/backup/restore_controller.go) in the function `Reconcile()`.
-
-### Getting Started
-
-To get started developing this operator, ensure you the following prerequisites:
-
-* A minishift VM running locally
-* Go >=1.10 installed
-* An IDE such as VSCode or Goland is recommended 👍
-
-1. Clone the repo to `$GOPATH/src/github.com/universityofadelaide/shepherd-operator`
-2. Login as cluster admin `oc login -u system:admin`
-3. Run `make install` to set up the CRD in your local OpenShift.
-4. Run `make run` to compile the local workspace and run the operator. Keep it running for the next few steps.
-5. Backup an environment via the Shepherd UI.
-6. Run `oc get jobs` to check out the jobs that were created.
-
-## Deployment
-
-1. `docker login` to Docker Hub (hub.docker.com).
-2. Set the exnvironment (production in this case) project/namespace `export NAMESPACE=shepeherd-prd`.
-3. Build the image `make docker-build`.
-4. Push the image to Docker Hub `make docker-push`.
-5. Take note of the previous deployment `oc describe sts/shepherd-operator-controller-manager`
-6. Delete the pod and replace it with the new image `oc delete pod shepherd-operator-controller-manager-0`.
-7. Verify `oc logs -f shepherd-operator-controller-manager-0 -c manager`.
-8. Run an upgrade and check that it actually works.
-
