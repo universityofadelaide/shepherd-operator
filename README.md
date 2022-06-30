@@ -93,7 +93,7 @@ oc apply -f config/rbac/
 6. Apply Deployment Manifests
 
 ```bash
-oc apply -f config/manager/deploy.yml
+oc apply -f config/manager/deployment.yml
 ```
 
 ## Local Development
