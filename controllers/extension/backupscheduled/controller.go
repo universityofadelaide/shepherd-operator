@@ -40,7 +40,6 @@ import (
 	shpmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 	"github.com/universityofadelaide/shepherd-operator/internal/clock"
 	"github.com/universityofadelaide/shepherd-operator/internal/events"
-	"github.com/universityofadelaide/shepherd-operator/internal/restic"
 	scheduledutils "github.com/universityofadelaide/shepherd-operator/internal/scheduled"
 )
 
@@ -348,9 +347,6 @@ func buildBackup(scheduled *extensionv1.BackupScheduled, scheme *runtime.Scheme,
 			Name:      fmt.Sprintf("%s-%d", scheduled.Name, scheduledTime.Unix()),
 			Namespace: scheduled.ObjectMeta.Namespace,
 			Labels:    scheduled.Labels,
-			Annotations: map[string]string{
-				restic.FriendlyNameAnnotation: scheduledTime.Format(shpmetav1.FriendlyNameFormat),
-			},
 		},
 		Spec: extensionv1.BackupSpec{
 			MySQL:   scheduled.Spec.MySQL,
