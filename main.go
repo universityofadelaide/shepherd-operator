@@ -110,6 +110,7 @@ func main() {
 				Image: os.Getenv("SHEPHERD_OPERATOR_BACKUP_MYSQL_IMAGE"),
 			},
 			AWS: backup.AWS{
+				Endpoint:       os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_ENDPOINT"),
 				BucketName:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_BUCKET_NAME"),
 				Image:          os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_IMAGE"),
 				FieldKeyID:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_KEY_ID"),
@@ -143,6 +144,7 @@ func main() {
 				Image: os.Getenv("SHEPHERD_OPERATOR_RESTORE_MYSQL_IMAGE"),
 			},
 			AWS: restore.AWS{
+				Endpoint:       os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_ENDPOINT"),
 				BucketName:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_BUCKET_NAME"),
 				Image:          os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_IMAGE"),
 				FieldKeyID:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_KEY_ID"),

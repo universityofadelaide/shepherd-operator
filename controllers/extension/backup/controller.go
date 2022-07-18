@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +19,7 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
+	awscli "github.com/universityofadelaide/shepherd-operator/internal/aws/cli"
 	podutils "github.com/universityofadelaide/shepherd-operator/internal/k8s/pod"
 )
 
@@ -72,6 +74,7 @@ type MySQL struct {
 
 // AWS params used by this controller.
 type AWS struct {
+	Endpoint       string
 	BucketName     string
 	Image          string
 	FieldKeyID     string
@@ -148,6 +151,26 @@ func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backu
 
 // Creates Pod objects based on the provided Spec configuration.
 func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, secret *corev1.Secret) (extensionv1.BackupStatus, error) {
+	cmd := awscli.CommandParams{
+		Endpoint:  r.Params.AWS.Endpoint,
+		Service:   "s3",
+		Operation: "sync",
+		Args: []string{
+			".", fmt.Sprintf("s3://%s/%s/%s", r.Params.AWS.BucketName, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
+		},
+	}
+
+	// @todo, This should be configured at the object level.
+	exclude := []string{
+		"volume/*/*/php",
+		"volume/*/*/css",
+		"volume/*/*/js",
+	}
+
+	for _, exclude := range exclude {
+		cmd.Args = append(cmd.Args, "--exclude", exclude)
+	}
+
 	// Container responsible for uploading database and files to AWS S3.
 	upload := corev1.Container{
 		Name:            "aws-s3-sync",
@@ -159,11 +182,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 			"bash",
 			"-c",
 		},
-		Args: []string{
-			// @todo, Remove hardcoded command.
-			// @todo, Determine requirements for S3 path.
-			fmt.Sprintf("aws s3 sync . s3://%s/%s/%s --exclude 'volume/*/*/php' --exclude 'volume/*/*/css' --exclude 'volume/*/*/js'", r.Params.AWS.BucketName, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
-		},
+		Args: awscli.Command(cmd),
 		Env: []corev1.EnvVar{
 			{
 				Name: EnvAWSAccessKeyID,
