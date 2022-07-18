@@ -19,6 +19,8 @@ package restore
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
 	osv1 "github.com/openshift/api/apps/v1"
@@ -36,10 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"time"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
+	awscli "github.com/universityofadelaide/shepherd-operator/internal/aws/cli"
 	"github.com/universityofadelaide/shepherd-operator/internal/events"
 	"github.com/universityofadelaide/shepherd-operator/internal/helper"
 	podutils "github.com/universityofadelaide/shepherd-operator/internal/k8s/pod"
@@ -101,6 +103,7 @@ type MySQL struct {
 
 // AWS params used by this controller.
 type AWS struct {
+	Endpoint       string
 	BucketName     string
 	Image          string
 	SecretName     string
@@ -206,6 +209,16 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 
 	// InitContainer which restores db to emptydir volume.
 	for mysqlName, mysqlStatus := range restore.Spec.MySQL {
+		cmd := awscli.CommandParams{
+			Endpoint:  r.Params.AWS.Endpoint,
+			Service:   "s3",
+			Operation: "cp",
+			Args: []string{
+				fmt.Sprintf("s3://%s/%s/%s/mysql/%s.sql", r.Params.AWS.BucketName, restore.ObjectMeta.Namespace, restore.Spec.BackupName, mysqlName),
+				fmt.Sprintf("mysql/%s.sql", mysqlName),
+			},
+		}
+
 		initContainers = append(initContainers, corev1.Container{
 			Name:       fmt.Sprintf("restore-%s", mysqlName),
 			Image:      r.Params.AWS.Image,
@@ -214,19 +227,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 			Command: []string{
 				"/bin/sh", "-c",
 			},
-			Args: []string{
-				// @todo, Remove hardcoded command.
-				// @todo, Determine requirements for S3 path.
-				helper.TprintfMustParse(
-					"aws s3 cp s3://{{.BucketName}}/{{.Namespace}}/{{.BackupName}}/mysql/{{.MySQLName}}.sql mysql/{{.MySQLName}}.sql",
-					map[string]interface{}{
-						"BucketName": r.Params.AWS.BucketName,
-						"Namespace":  restore.ObjectMeta.Namespace,
-						"BackupName": restore.Spec.BackupName,
-						"MySQLName":  mysqlName,
-					},
-				),
-			},
+			Args: awscli.Command(cmd),
 			Env: []corev1.EnvVar{
 				{
 					Name: EnvAWSAccessKeyID,
@@ -352,6 +353,16 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 
 	// Attach restore volumes to pod.
 	for volumeName, volumeSpec := range restore.Spec.Volumes {
+		cmd := awscli.CommandParams{
+			Endpoint:  r.Params.AWS.Endpoint,
+			Service:   "s3",
+			Operation: "cp",
+			Args: []string{
+				fmt.Sprintf("s3://%s/%s/%s/%s/", r.Params.AWS.BucketName, restore.ObjectMeta.Namespace, restore.Spec.BackupName, volumeName),
+				fmt.Sprintf("%s/volume/%s/", r.Params.WorkingDir, volumeName),
+			},
+		}
+
 		specVolumes = append(specVolumes, corev1.Volume{
 			Name: fmt.Sprintf("volume-%s", volumeName),
 			VolumeSource: corev1.VolumeSource{
@@ -370,20 +381,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 			Command: []string{
 				"/bin/sh", "-c",
 			},
-			Args: []string{
-				// @todo, Remove hardcoded command.
-				// @todo, Determine requirements for S3 path.
-				helper.TprintfMustParse(
-					"aws s3 sync --delete s3://{{.BucketName}}/{{.Namespace}}/{{.BackupName}}/{{.VolumeName}}/ {{.MountPath}}/",
-					map[string]interface{}{
-						"BucketName": r.Params.AWS.BucketName,
-						"Namespace":  restore.ObjectMeta.Namespace,
-						"BackupName": restore.Spec.BackupName,
-						"VolumeName": volumeName,
-						"MountPath":  fmt.Sprintf("%s/volume/%s", r.Params.WorkingDir, volumeName),
-					},
-				),
-			},
+			Args: awscli.Command(cmd),
 			Env: []corev1.EnvVar{
 				{
 					Name: EnvAWSAccessKeyID,
