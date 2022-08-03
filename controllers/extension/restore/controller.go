@@ -19,6 +19,8 @@ package restore
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
 	osv1 "github.com/openshift/api/apps/v1"
@@ -36,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"time"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
@@ -103,7 +104,6 @@ type MySQL struct {
 type AWS struct {
 	BucketName     string
 	Image          string
-	SecretName     string
 	FieldKeyID     string
 	FieldAccessKey string
 	Region         string
@@ -184,7 +184,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	status, err := r.createPod(ctx, restore, dc)
+	secret, err := r.createSecret(ctx, backup, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
+	}
+
+	status, err := r.createPod(ctx, restore, secret, dc)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Pod: %w", err)
 	}
@@ -199,8 +204,32 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return reconcile.Result{}, nil
 }
 
+// Creates Secret object based on the provided Spec configuration.
+func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backup, key, access string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("restore-%s", backup.ObjectMeta.Name),
+			Namespace: backup.ObjectMeta.Namespace,
+		},
+		Data: map[string][]byte{
+			EnvAWSAccessKeyID:     []byte(key),
+			EnvAWSSecretAccessKey: []byte(access),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(backup, secret, r.Scheme); err != nil {
+		return nil, err
+	}
+
+	if err := r.Create(ctx, secret); client.IgnoreNotFound(err) != nil {
+		return nil, err
+	}
+
+	return secret, nil
+}
+
 // Creates Pod objects based on the provided Spec configuration.
-func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore, dc *osv1.DeploymentConfig) (extensionv1.RestoreStatus, error) {
+func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore, secret *corev1.Secret, dc *osv1.DeploymentConfig) (extensionv1.RestoreStatus, error) {
 	var initContainers []corev1.Container
 	var containers []corev1.Container
 
@@ -233,9 +262,9 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: r.Params.AWS.SecretName,
+								Name: secret.ObjectMeta.Name,
 							},
-							Key: r.Params.AWS.FieldKeyID,
+							Key: EnvAWSAccessKeyID,
 						},
 					},
 				},
@@ -244,9 +273,9 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: r.Params.AWS.SecretName,
+								Name: secret.ObjectMeta.Name,
 							},
-							Key: r.Params.AWS.FieldAccessKey,
+							Key: EnvAWSSecretAccessKey,
 						},
 					},
 				},
@@ -390,9 +419,9 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: r.Params.AWS.SecretName,
+								Name: secret.ObjectMeta.Name,
 							},
-							Key: r.Params.AWS.FieldKeyID,
+							Key: EnvAWSAccessKeyID,
 						},
 					},
 				},
@@ -401,9 +430,9 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: r.Params.AWS.SecretName,
+								Name: secret.ObjectMeta.Name,
 							},
-							Key: r.Params.AWS.FieldAccessKey,
+							Key: EnvAWSSecretAccessKey,
 						},
 					},
 				},

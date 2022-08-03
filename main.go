@@ -18,8 +18,6 @@ package main
 
 import (
 	"flag"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -27,6 +25,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -112,7 +112,6 @@ func main() {
 			AWS: backup.AWS{
 				BucketName:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_BUCKET_NAME"),
 				Image:          os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_IMAGE"),
-				SecretName:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_SECRET_NAME"),
 				FieldKeyID:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_KEY_ID"),
 				FieldAccessKey: os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_ACCESS_KEY"),
 				Region:         os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_REGION"),
@@ -127,7 +126,7 @@ func main() {
 		Client:    mgr.GetClient(),
 		OpenShift: osclient,
 		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor(backupscheduled.ControllerName),
+		Recorder:  mgr.GetEventRecorderFor(restore.ControllerName),
 		Params: restore.Params{
 			ResourceRequirements: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
@@ -146,14 +145,13 @@ func main() {
 			AWS: restore.AWS{
 				BucketName:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_BUCKET_NAME"),
 				Image:          os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_IMAGE"),
-				SecretName:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_SECRET_NAME"),
 				FieldKeyID:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_KEY_ID"),
 				FieldAccessKey: os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_ACCESS_KEY"),
 				Region:         os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_REGION"),
 			},
 		},
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", backupscheduled.ControllerName)
+		setupLog.Error(err, "unable to create controller", "controller", restore.ControllerName)
 		os.Exit(1)
 	}
 
