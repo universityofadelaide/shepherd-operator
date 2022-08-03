@@ -50,7 +50,6 @@ func TestReconcile(t *testing.T) {
 			AWS: AWS{
 				BucketName:     "test",
 				Image:          "aws-cli:latest",
-				SecretName:     "backup",
 				FieldKeyID:     "aws.key.id",
 				FieldAccessKey: "aws.access.key",
 				Region:         "ap-southeast-2",
