@@ -19,8 +19,6 @@ package backup
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +33,6 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
-	resticutils "github.com/universityofadelaide/shepherd-operator/internal/restic"
 )
 
 const (
@@ -76,13 +73,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("sync-%s-backup", sync.ObjectMeta.Name),
 			Namespace: sync.ObjectMeta.Namespace,
-			Annotations: map[string]string{
-				resticutils.FriendlyNameAnnotation: time.Now().Format(shpdmetav1.FriendlyNameFormat),
-			},
 			Labels: map[string]string{
-				"site":                sync.Spec.Site,
-				"environment":         sync.Spec.BackupEnv,
-				resticutils.SyncLabel: "1",
+				"site":        sync.Spec.Site,
+				"environment": sync.Spec.BackupEnv,
 			},
 		},
 		Spec: sync.Spec.BackupSpec,

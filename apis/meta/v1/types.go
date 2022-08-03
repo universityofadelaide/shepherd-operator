@@ -63,9 +63,6 @@ const (
 
 	// ReplaceConcurrent cancels currently running job and replaces it with a new one.
 	ReplaceConcurrent ConcurrencyPolicy = "Replace"
-
-	// FriendlyNameFormat is the time format for default friendly name.
-	FriendlyNameFormat = "Mon, 02/01/2006 - 15:04"
 )
 
 // ScheduledAnnotation is used to detect the time when an object was scheduled.

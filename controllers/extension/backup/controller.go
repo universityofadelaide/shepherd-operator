@@ -1,39 +1,15 @@
-/*
-Copyright 2022.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package backup
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
-	"github.com/pkg/errors"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,44 +18,77 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
-	v1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
-	"github.com/universityofadelaide/shepherd-operator/internal/events"
-	jobutils "github.com/universityofadelaide/shepherd-operator/internal/k8s/job"
-	"github.com/universityofadelaide/shepherd-operator/internal/restic"
-	sliceutils "github.com/universityofadelaide/shepherd-operator/internal/slice"
+	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
+	awscli "github.com/universityofadelaide/shepherd-operator/internal/aws/cli"
+	podutils "github.com/universityofadelaide/shepherd-operator/internal/k8s/pod"
 )
 
 const (
-	// ControllerName used for identifying which controller is performing an operation.
-	ControllerName = "backup-restic-controller"
-	// Finalizer used by this controller to perform a final operation on object deletion.
-	Finalizer = "backups.finalizers.shepherd"
+	// ControllerName is used to identify this controller in logs and events.
+	ControllerName = "backup-controller"
+
+	// EnvAWSAccessKeyID for authentication.
+	EnvAWSAccessKeyID = "AWS_ACCESS_KEY_ID"
+	// EnvAWSSecretAccessKey for authentication.
+	EnvAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+	// EnvAWSRegion for authentication.
+	EnvAWSRegion = "AWS_DEFAULT_REGION"
+
+	// EnvMySQLHostname for MySQL connection.
+	EnvMySQLHostname = "MYSQL_HOSTNAME"
+	// EnvMySQLDatabase for MySQL connection.
+	EnvMySQLDatabase = "MYSQL_DATABASE"
+	// EnvMySQLPort for MySQL connection.
+	EnvMySQLPort = "MYSQL_PORT"
+	// EnvMySQLUsername for MySQL connection.
+	EnvMySQLUsername = "MYSQL_USERNAME"
+	// EnvMySQLPassword for MySQL connection.
+	EnvMySQLPassword = "MYSQL_PASSWORD"
+
+	// VolumeMySQL identifier for mysql storage.
+	VolumeMySQL = "mysql"
 )
 
 // Reconciler reconciles a Backup object
 type Reconciler struct {
 	client.Client
-	Config   *rest.Config
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 	Params   Params
 }
 
-// Params which are provided to this controller.
+// Params used by this controller.
 type Params struct {
-	// Parameters which are used when provisioning a Pod instance.
-	PodSpec restic.PodSpecParams
+	ResourceRequirements corev1.ResourceRequirements
+	WorkingDir           string
+	// MySQL params used by this controller.
+	MySQL MySQL
+	// AWS params used by this controller.
+	AWS AWS
 }
 
-//+kubebuilder:rbac:groups=v1,resources=pods,verbs=get;list
-//+kubebuilder:rbac:groups=v1,resources=pods/log,verbs=get
-//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=batch,resources=jobs/finalizers,verbs=get;list;watch;create;update;patch;delete
+// MySQL params used by this controller.
+type MySQL struct {
+	Image string
+}
+
+// AWS params used by this controller.
+type AWS struct {
+	Endpoint       string
+	BucketName     string
+	Image          string
+	FieldKeyID     string
+	FieldAccessKey string
+	Region         string
+}
+
+//+kubebuilder:rbac:groups=batch,resources=pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=batch,resources=pods/status,verbs=get
 //+kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=extension.shepherd,resources=backups/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=extension.shepherd,resources=backups/finalizers,verbs=update
 
+// Reconcile a Backup object
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -87,306 +96,293 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	backup := &extensionv1.Backup{}
 
-	err := r.Get(ctx, req.NamespacedName, backup)
-	if err != nil {
+	if err := r.Get(ctx, req.NamespacedName, backup); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if backup.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, if it does not have this finalizer,
-		// add it and update the object.
-		if !sliceutils.Contains(backup.ObjectMeta.Finalizers, Finalizer) {
-			logger.Info("Adding finalizer")
-
-			backup.ObjectMeta.Finalizers = append(backup.ObjectMeta.Finalizers, Finalizer)
-			if err := r.Update(ctx, backup); err != nil {
-				return reconcile.Result{Requeue: true}, nil
-			}
-		}
-	} else {
-		// The object is being deleted, ensure that the finalizer exists then
-		// create a job to delete the restic snapshot.
-		if sliceutils.Contains(backup.ObjectMeta.Finalizers, Finalizer) {
-			// Check status of restic-delete job.
-			newJob := &batchv1.Job{}
-
-			nsn := types.NamespacedName{
-				Namespace: backup.Namespace,
-				Name:      fmt.Sprintf("%s-delete-%s", restic.Prefix, backup.Name),
-			}
-
-			err := r.Get(ctx, nsn, newJob)
-			if err != nil {
-				if !kerrors.IsNotFound(err) {
-					return reconcile.Result{Requeue: true}, err
-				}
-
-				logger.Info("Forgetting the Restic snapshot", "id", backup.Status.ResticID)
-
-				if backup.Status.ResticID == "" {
-					// Allow the backup to delete when we don't know the restic id.
-					logger.Info("No restic ID associated when attempting to delete backup", "name", backup.ObjectMeta.Name)
-					return r.removeFinalizer(ctx, backup)
-				} else {
-					// Job doesnt exist, create it.
-					err := r.DeleteResticSnapshot(ctx, backup)
-					return reconcile.Result{RequeueAfter: 5 * time.Second}, err
-				}
-			}
-
-			if jobutils.IsFinished(newJob) {
-				logger.Info("Removing finalizer", "finalizer", Finalizer)
-				return r.removeFinalizer(ctx, backup)
-			}
-
-			logger.Info("Requeuing to wait for finalizer Job to finish")
-
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
-		return reconcile.Result{}, nil
-	}
-
 	// Backup has completed or failed, return early.
-	if backup.Status.Phase == v1.PhaseCompleted || backup.Status.Phase == v1.PhaseFailed {
+	if backup.Status.Phase == shpdmetav1.PhaseCompleted || backup.Status.Phase == shpdmetav1.PhaseFailed {
 		return reconcile.Result{}, nil
 	}
 
-	if _, found := backup.ObjectMeta.GetLabels()["site"]; !found {
-		// @todo add some info to the status identifying the backup failed
-		logger.Info(fmt.Sprintf("Backup %s doesn't have a site label, skipping.", backup.ObjectMeta.Name))
-		return reconcile.Result{}, nil
+	secret, err := r.createSecret(ctx, backup, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
 	}
 
-	return r.SyncJob(ctx, logger, backup)
+	status, err := r.createPod(ctx, backup, secret)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create Pod: %w", err)
+	}
+
+	err = r.updateStatus(ctx, logger, backup, status)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update Backup status: %w", err)
+	}
+
+	logger.Info("Finished reconcile loop")
+
+	return ctrl.Result{}, nil
 }
 
-// SyncJob creates or updates the restic backup jobs.
-func (r *Reconciler) SyncJob(ctx context.Context, log logr.Logger, backup *extensionv1.Backup) (reconcile.Result, error) {
-	// Backup has completed or failed, return early.
-	if backup.Status.Phase == v1.PhaseCompleted || backup.Status.Phase == v1.PhaseFailed {
-		return reconcile.Result{}, nil
-	}
-
-	spec, err := restic.PodSpecBackup(backup, r.Params.PodSpec, backup.ObjectMeta.GetLabels()["site"])
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	var (
-		parallelism    int32 = 1
-		completions    int32 = 1
-		activeDeadline int64 = 3600
-		backOffLimit   int32 = 2
-	)
-
-	job := &batchv1.Job{
+// Creates Secret object based on the provided Spec configuration.
+func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backup, key, access string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", restic.Prefix, backup.ObjectMeta.Name),
+			Name:      fmt.Sprintf("backup-%s", backup.ObjectMeta.Name),
 			Namespace: backup.ObjectMeta.Namespace,
-			Labels: map[string]string{
-				"app":          "restic",
-				"resticAction": "backup",
-			},
 		},
-		Spec: batchv1.JobSpec{
-			Parallelism:           &parallelism,
-			Completions:           &completions,
-			ActiveDeadlineSeconds: &activeDeadline,
-			BackoffLimit:          &backOffLimit,
-			Template: corev1.PodTemplateSpec{
-				Spec: spec,
-			},
+		Data: map[string][]byte{
+			EnvAWSAccessKeyID:     []byte(key),
+			EnvAWSSecretAccessKey: []byte(access),
 		},
 	}
 
-	log.Info("Syncing Job")
-
-	if err := controllerutil.SetControllerReference(backup, job, r.Scheme); err != nil {
-		return reconcile.Result{}, err
+	if err := controllerutil.SetControllerReference(backup, secret, r.Scheme); err != nil {
+		return nil, err
 	}
 
-	if err := r.Create(ctx, job); client.IgnoreNotFound(err) != nil {
-		return reconcile.Result{}, err
+	if err := r.Create(ctx, secret); client.IgnoreNotFound(err) != nil {
+		return nil, err
 	}
 
-	if err = r.Get(ctx, types.NamespacedName{
-		Namespace: job.ObjectMeta.Namespace,
-		Name:      job.ObjectMeta.Name,
-	}, job); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	log.Info("Syncing status")
-
-	status := extensionv1.BackupStatus{
-		Phase:          v1.PhaseNew,
-		StartTime:      job.Status.StartTime,
-		CompletionTime: job.Status.CompletionTime,
-	}
-
-	if job.Status.Active > 0 {
-		status.Phase = v1.PhaseInProgress
-	} else {
-		if job.Status.Succeeded > 0 {
-			resticId, err := getResticIdFromJob(ctx, r.Config, job)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrap(err, "failed to parse resticId")
-			}
-
-			if resticId != "" {
-				status.ResticID = resticId
-				status.Phase = v1.PhaseCompleted
-			} else {
-				status.Phase = v1.PhaseFailed
-			}
-		}
-		if job.Status.Failed > 0 {
-			status.Phase = v1.PhaseFailed
-		}
-	}
-
-	if diff := deep.Equal(backup.Status, status); diff != nil {
-		log.Info(fmt.Sprintf("Status change dectected: %s", diff))
-
-		backup.Status = status
-
-		err := r.Status().Update(ctx, backup)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed to update status")
-		}
-	}
-
-	log.Info("Reconcile finished")
-
-	return reconcile.Result{}, nil
+	return secret, nil
 }
 
-// DeleteResticSnapshot creates the job to forget a restic snapshot.
-func (r *Reconciler) DeleteResticSnapshot(ctx context.Context, backup *extensionv1.Backup) error {
-	if backup.Status.ResticID == "" {
-		return errors.Errorf("Could't delete restic snapshot. Restic ID missing for backup: %s", backup.ObjectMeta.Name)
+// Creates Pod objects based on the provided Spec configuration.
+func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, secret *corev1.Secret) (extensionv1.BackupStatus, error) {
+	cmd := awscli.CommandParams{
+		Endpoint:  r.Params.AWS.Endpoint,
+		Service:   "s3",
+		Operation: "sync",
+		Args: []string{
+			".", fmt.Sprintf("s3://%s/%s/%s", r.Params.AWS.BucketName, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
+		},
 	}
 
-	spec, err := restic.PodSpecDelete(
-		backup.Status.ResticID,
-		backup.ObjectMeta.Namespace,
-		backup.ObjectMeta.GetLabels()["site"],
-		r.Params.PodSpec,
-	)
-	if err != nil {
-		return err
+	// @todo, This should be configured at the object level.
+	exclude := []string{
+		"volume/*/*/php",
+		"volume/*/*/css",
+		"volume/*/*/js",
 	}
 
-	var (
-		parallelism    int32 = 1
-		completions    int32 = 1
-		activeDeadline int64 = 3600
-		backOffLimit   int32 = 2
-		//ttl            int32 = 3600
-	)
+	for _, exclude := range exclude {
+		cmd.Args = append(cmd.Args, "--exclude", exclude)
+	}
 
-	job := &batchv1.Job{
+	// Container responsible for uploading database and files to AWS S3.
+	upload := corev1.Container{
+		Name:            "aws-s3-sync",
+		Image:           r.Params.AWS.Image,
+		ImagePullPolicy: corev1.PullAlways,
+		Resources:       r.Params.ResourceRequirements,
+		WorkingDir:      r.Params.WorkingDir,
+		Command: []string{
+			"bash",
+			"-c",
+		},
+		Args: awscli.Command(cmd),
+		Env: []corev1.EnvVar{
+			{
+				Name: EnvAWSAccessKeyID,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secret.ObjectMeta.Name,
+						},
+						Key: EnvAWSAccessKeyID,
+					},
+				},
+			},
+			{
+				Name: EnvAWSSecretAccessKey,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secret.ObjectMeta.Name,
+						},
+						Key: EnvAWSSecretAccessKey,
+					},
+				},
+			},
+			{
+				Name:  EnvAWSRegion,
+				Value: r.Params.AWS.Region,
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      VolumeMySQL,
+				MountPath: fmt.Sprintf("%s/mysql", r.Params.WorkingDir),
+			},
+		},
+	}
+
+	for volumeName := range backup.Spec.Volumes {
+		upload.VolumeMounts = append(upload.VolumeMounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("volume-%s", volumeName),
+			MountPath: fmt.Sprintf("%s/volume/%s", r.Params.WorkingDir, volumeName),
+			ReadOnly:  true,
+		})
+	}
+
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-delete-%s", restic.Prefix, backup.Name),
+			Name:      fmt.Sprintf("backup-%s", backup.ObjectMeta.Name),
 			Namespace: backup.ObjectMeta.Namespace,
-			Labels: map[string]string{
-				"app":          "restic",
-				"resticAction": "delete",
-			},
 		},
-		Spec: batchv1.JobSpec{
-			// @todo uncomment this when the feature becomes available (requires kube v1.12+).
-			// ttlSecondsAfterFinished: &ttl,
-			Parallelism:           &parallelism,
-			Completions:           &completions,
-			ActiveDeadlineSeconds: &activeDeadline,
-			BackoffLimit:          &backOffLimit,
-			Template: corev1.PodTemplateSpec{
-				Spec: spec,
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				upload,
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: VolumeMySQL,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumDefault,
+						},
+					},
+				},
 			},
 		},
 	}
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, job, func() error {
+	for volumeName, volumeSpec := range backup.Spec.Volumes {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: fmt.Sprintf("volume-%s", volumeName),
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: volumeSpec.ClaimName,
+				},
+			},
+		})
+	}
+
+	for mysqlName, mysqlStatus := range backup.Spec.MySQL {
+		pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
+			Name:       fmt.Sprintf("mysql-%s", mysqlName),
+			Image:      r.Params.MySQL.Image,
+			Resources:  r.Params.ResourceRequirements,
+			WorkingDir: r.Params.WorkingDir,
+			Command: []string{
+				"bash",
+				"-c",
+			},
+			Args: []string{
+				// @todo, Remove hardcoded command and path.
+				fmt.Sprintf("database-backup > mysql/%s.sql", mysqlName),
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name: EnvMySQLHostname,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: mysqlStatus.Secret.Name,
+							},
+							Key: mysqlStatus.Secret.Keys.Hostname,
+						},
+					},
+				},
+				{
+					Name: EnvMySQLDatabase,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: mysqlStatus.Secret.Name,
+							},
+							Key: mysqlStatus.Secret.Keys.Database,
+						},
+					},
+				},
+				{
+					Name: EnvMySQLPort,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: mysqlStatus.Secret.Name,
+							},
+							Key: mysqlStatus.Secret.Keys.Port,
+						},
+					},
+				},
+				{
+					Name: EnvMySQLUsername,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: mysqlStatus.Secret.Name,
+							},
+							Key: mysqlStatus.Secret.Keys.Username,
+						},
+					},
+				},
+				{
+					Name: EnvMySQLPassword,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: mysqlStatus.Secret.Name,
+							},
+							Key: mysqlStatus.Secret.Keys.Password,
+						},
+					},
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name: VolumeMySQL,
+					// @todo, Remove hardcoded mysql path.
+					MountPath: fmt.Sprintf("%s/mysql", r.Params.WorkingDir),
+				},
+			},
+		})
+	}
+
+	var status extensionv1.BackupStatus
+
+	if err := controllerutil.SetControllerReference(backup, pod, r.Scheme); err != nil {
+		return status, err
+	}
+
+	if err := r.Create(ctx, pod); client.IgnoreNotFound(err) != nil {
+		return status, err
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: pod.ObjectMeta.Namespace,
+		Name:      pod.ObjectMeta.Name,
+	}, pod); err != nil {
+		return status, err
+	}
+
+	status.Phase = podutils.GetPhase(pod.Status)
+	status.StartTime = pod.Status.StartTime
+	status.CompletionTime = podutils.CompletionTime(pod)
+
+	return status, nil
+}
+
+// Update the Backup status.
+func (r *Reconciler) updateStatus(ctx context.Context, log logr.Logger, backup *extensionv1.Backup, status extensionv1.BackupStatus) error {
+	diff := deep.Equal(backup.Status, status)
+	if diff == nil {
 		return nil
-	})
-	if err != nil {
-		return err
 	}
 
-	switch result {
-	case controllerutil.OperationResultCreated:
-		r.Recorder.Eventf(backup, corev1.EventTypeNormal, events.EventCreate, "Job has been created: %s", job.ObjectMeta.Name)
-	case controllerutil.OperationResultUpdated:
-		r.Recorder.Eventf(backup, corev1.EventTypeNormal, events.EventUpdate, "Job has been updated: %s", job.ObjectMeta.Name)
-	}
+	log.Info(fmt.Sprintf("Status change dectected: %s", diff))
 
-	return err
+	backup.Status = status
+
+	return r.Status().Update(ctx, backup)
 }
 
-// getResticIdFromJob parses output from a job's pods and returns a restic ID from the logs.
-func getResticIdFromJob(ctx context.Context, config *rest.Config, job *batchv1.Job) (string, error) {
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return "", err
-	}
-
-	pods, err := clientset.CoreV1().Pods(job.ObjectMeta.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(job.Spec.Template.ObjectMeta.Labels).String(),
-	})
-	if err != nil {
-		return "", err
-	}
-
-	for _, pod := range pods.Items {
-		if pod.Status.Phase != corev1.PodSucceeded {
-			continue
-		}
-
-		podLogs, err := getPodLogs(ctx, clientset, pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
-		if err != nil {
-			return "", err
-		}
-
-		resticId := restic.ParseSnapshotID(podLogs)
-		if resticId != "" {
-			return resticId, nil
-		}
-	}
-
-	return "", nil
-}
-
-// getPodLogs gets the logs from the restic container from a pod as a string.
-func getPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespace string, podName string) (string, error) {
-	body, err := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: restic.ResticBackupContainerName,
-	}).Stream(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer body.Close()
-
-	podLogs, err := ioutil.ReadAll(body)
-	if err != nil {
-		return "", err
-	}
-
-	return string(podLogs), nil
-}
-
-// Helper function to remove the finalizer and exit a reconcile loop.
-func (r *Reconciler) removeFinalizer(ctx context.Context, backup *extensionv1.Backup) (reconcile.Result, error) {
-	backup.ObjectMeta.Finalizers = sliceutils.Remove(backup.ObjectMeta.Finalizers, Finalizer)
-	err := r.Update(ctx, backup)
-	return reconcile.Result{}, err
-}
-
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager will setup the controller.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&extensionv1.Backup{}).
-		Owns(&batchv1.Job{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }

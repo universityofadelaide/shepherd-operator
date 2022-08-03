@@ -19,6 +19,7 @@ package restore
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-test/deep"
 	osv1 "github.com/openshift/api/apps/v1"
@@ -36,7 +37,6 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
-	resticutils "github.com/universityofadelaide/shepherd-operator/internal/restic"
 )
 
 const (
@@ -83,7 +83,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// Check the deployment is running so we can create a restore.
 	if !isDeploymentRunning(dc) {
 		logger.Info("Deployment not yet running, will requeue after 10 seconds")
-		return resticutils.RequeueAfterSeconds(60), nil
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
 	}
 
 	restore := &extensionv1.Restore{

@@ -25,6 +25,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -37,7 +39,6 @@ import (
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/backupscheduled"
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/restore"
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/sync"
-	resticutils "github.com/universityofadelaide/shepherd-operator/internal/restic"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -91,17 +92,30 @@ func main() {
 
 	if err = (&backup.Reconciler{
 		Client:   mgr.GetClient(),
-		Config:   mgr.GetConfig(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(backup.ControllerName),
 		Params: backup.Params{
-			PodSpec: resticutils.PodSpecParams{
-				CPU:         os.Getenv("SHEPHERD_OPERATOR_BACKUP_CPU"),
-				Memory:      os.Getenv("SHEPHERD_OPERATOR_BACKUP_MEMORY"),
-				ResticImage: os.Getenv("SHEPHERD_OPERATOR_BACKUP_RESTIC_IMAGE"),
-				MySQLImage:  os.Getenv("SHEPHERD_OPERATOR_BACKUP_MYSQL_IMAGE"),
-				WorkingDir:  os.Getenv("SHEPHERD_OPERATOR_BACKUP_WORKING_DIR"),
-				Tags:        []string{},
+			ResourceRequirements: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_BACKUP_CPU")),
+					corev1.ResourceMemory: resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_BACKUP_MEMORY")),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_BACKUP_CPU")),
+					corev1.ResourceMemory: resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_BACKUP_MEMORY")),
+				},
+			},
+			WorkingDir: os.Getenv("SHEPHERD_OPERATOR_BACKUP_WORKING_DIR"),
+			MySQL: backup.MySQL{
+				Image: os.Getenv("SHEPHERD_OPERATOR_BACKUP_MYSQL_IMAGE"),
+			},
+			AWS: backup.AWS{
+				Endpoint:       os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_ENDPOINT"),
+				BucketName:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_BUCKET_NAME"),
+				Image:          os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_IMAGE"),
+				FieldKeyID:     os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_KEY_ID"),
+				FieldAccessKey: os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_ACCESS_KEY"),
+				Region:         os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_REGION"),
 			},
 		},
 	}).SetupWithManager(mgr); err != nil {
@@ -113,19 +127,33 @@ func main() {
 		Client:    mgr.GetClient(),
 		OpenShift: osclient,
 		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor(backupscheduled.ControllerName),
+		Recorder:  mgr.GetEventRecorderFor(restore.ControllerName),
 		Params: restore.Params{
-			PodSpec: resticutils.PodSpecParams{
-				CPU:         os.Getenv("SHEPHERD_OPERATOR_RESTORE_CPU"),
-				Memory:      os.Getenv("SHEPHERD_OPERATOR_RESTORE_MEMORY"),
-				ResticImage: os.Getenv("SHEPHERD_OPERATOR_RESTORE_RESTIC_IMAGE"),
-				MySQLImage:  os.Getenv("SHEPHERD_OPERATOR_RESTORE_MYSQL_IMAGE"),
-				WorkingDir:  os.Getenv("SHEPHERD_OPERATOR_RESTORE_WORKING_DIR"),
-				Tags:        []string{},
+			ResourceRequirements: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_RESTORE_CPU")),
+					corev1.ResourceMemory: resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_RESTORE_MEMORY")),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_RESTORE_CPU")),
+					corev1.ResourceMemory: resource.MustParse(os.Getenv("SHEPHERD_OPERATOR_RESTORE_MEMORY")),
+				},
+			},
+			WorkingDir: os.Getenv("SHEPHERD_OPERATOR_RESTORE_WORKING_DIR"),
+			MySQL: restore.MySQL{
+				Image: os.Getenv("SHEPHERD_OPERATOR_RESTORE_MYSQL_IMAGE"),
+			},
+			AWS: restore.AWS{
+				Endpoint:       os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_ENDPOINT"),
+				BucketName:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_BUCKET_NAME"),
+				Image:          os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_IMAGE"),
+				FieldKeyID:     os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_KEY_ID"),
+				FieldAccessKey: os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_ACCESS_KEY"),
+				Region:         os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_REGION"),
 			},
 		},
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", backupscheduled.ControllerName)
+		setupLog.Error(err, "unable to create controller", "controller", restore.ControllerName)
 		os.Exit(1)
 	}
 

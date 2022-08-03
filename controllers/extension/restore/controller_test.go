@@ -15,7 +15,6 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	mockevents "github.com/universityofadelaide/shepherd-operator/internal/events/mock"
-	"github.com/universityofadelaide/shepherd-operator/internal/restic"
 )
 
 func TestReconcile(t *testing.T) {
@@ -44,13 +43,17 @@ func TestReconcile(t *testing.T) {
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
 		Params: Params{
-			PodSpec: restic.PodSpecParams{
-				CPU:         "500m",
-				Memory:      "512Mi",
-				ResticImage: "docker.io/restic/restic:0.9.5",
-				MySQLImage:  "skpr/mtk-mysql",
-				WorkingDir:  "/home/shepherd",
-				Tags:        []string{},
+			ResourceRequirements: corev1.ResourceRequirements{},
+			WorkingDir:           "/tmp",
+			MySQL: MySQL{
+				Image: "mysql:latest",
+			},
+			AWS: AWS{
+				BucketName:     "test",
+				Image:          "aws-cli:latest",
+				FieldKeyID:     "aws.key.id",
+				FieldAccessKey: "aws.access.key",
+				Region:         "ap-southeast-2",
 			},
 		},
 	}

@@ -34,7 +34,6 @@ type BackupSpec struct {
 type BackupStatus struct {
 	StartTime      *metav1.Time    `json:"startTime,omitempty"`
 	CompletionTime *metav1.Time    `json:"completionTime,omitempty"`
-	ResticID       string          `json:"resticId,omitempty"`
 	Phase          shpmetav1.Phase `json:"phase"`
 }
 
