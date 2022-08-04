@@ -211,7 +211,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 	for mysqlName, mysqlStatus := range restore.Spec.MySQL {
 		cmd := awscli.CommandParams{
 			Endpoint:  r.Params.AWS.Endpoint,
-			Service:   "s3",
+			Service:   "aws s3",
 			Operation: "cp",
 			Args: []string{
 				fmt.Sprintf("s3://%s/%s/%s/mysql/%s.sql", r.Params.AWS.BucketName, restore.ObjectMeta.Namespace, restore.Spec.BackupName, mysqlName),
@@ -355,7 +355,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 	for volumeName, volumeSpec := range restore.Spec.Volumes {
 		cmd := awscli.CommandParams{
 			Endpoint:  r.Params.AWS.Endpoint,
-			Service:   "s3",
+			Service:   "aws s3",
 			Operation: "cp",
 			Args: []string{
 				fmt.Sprintf("s3://%s/%s/%s/%s/", r.Params.AWS.BucketName, restore.ObjectMeta.Namespace, restore.Spec.BackupName, volumeName),

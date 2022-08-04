@@ -125,7 +125,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup) (extensionv1.BackupStatus, error) {
 	cmd := awscli.CommandParams{
 		Endpoint:  r.Params.AWS.Endpoint,
-		Service:   "s3",
+		Service:   "aws s3",
 		Operation: "sync",
 		Args: []string{
 			".", fmt.Sprintf("s3://%s/%s/%s", r.Params.AWS.BucketName, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
