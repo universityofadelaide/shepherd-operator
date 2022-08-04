@@ -186,12 +186,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	secret, err := r.createSecret(ctx, restore, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
+	err = r.createSecret(ctx, restore, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
 	}
 
-	status, err := r.createPod(ctx, restore, secret, dc)
+	status, err := r.createPod(ctx, restore, dc)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Pod: %w", err)
 	}
@@ -207,7 +207,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 }
 
 // Creates Secret object based on the provided Spec configuration.
-func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Restore, key, access string) (*corev1.Secret, error) {
+func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Restore, key, access string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getName(restore),
@@ -220,18 +220,20 @@ func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Rest
 	}
 
 	if err := controllerutil.SetControllerReference(restore, secret, r.Scheme); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := r.Create(ctx, secret); client.IgnoreNotFound(err) != nil {
-		return nil, err
+	err := r.Create(ctx, secret)
+
+	if kerrors.IsAlreadyExists(err) {
+		return nil
 	}
 
-	return secret, nil
+	return err
 }
 
 // Creates Pod objects based on the provided Spec configuration.
-func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore, secret *corev1.Secret, dc *osv1.DeploymentConfig) (extensionv1.RestoreStatus, error) {
+func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore, dc *osv1.DeploymentConfig) (extensionv1.RestoreStatus, error) {
 	var initContainers []corev1.Container
 	var containers []corev1.Container
 
