@@ -186,7 +186,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	secret, err := r.createSecret(ctx, backup, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
+	secret, err := r.createSecret(ctx, restore, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
 	}
@@ -207,11 +207,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 }
 
 // Creates Secret object based on the provided Spec configuration.
-func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backup, key, access string) (*corev1.Secret, error) {
+func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Restore, key, access string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("restore-%s", backup.ObjectMeta.Name),
-			Namespace: backup.ObjectMeta.Namespace,
+			Name:      getName(restore),
+			Namespace: restore.ObjectMeta.Namespace,
 		},
 		Data: map[string][]byte{
 			EnvAWSAccessKeyID:     []byte(key),
@@ -219,7 +219,7 @@ func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backu
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(backup, secret, r.Scheme); err != nil {
+	if err := controllerutil.SetControllerReference(restore, secret, r.Scheme); err != nil {
 		return nil, err
 	}
 
@@ -262,7 +262,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: secret.ObjectMeta.Name,
+								Name: getName(restore),
 							},
 							Key: EnvAWSAccessKeyID,
 						},
@@ -273,7 +273,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: secret.ObjectMeta.Name,
+								Name: getName(restore),
 							},
 							Key: EnvAWSSecretAccessKey,
 						},
@@ -416,7 +416,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: secret.ObjectMeta.Name,
+								Name: getName(restore),
 							},
 							Key: EnvAWSAccessKeyID,
 						},
@@ -427,7 +427,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: secret.ObjectMeta.Name,
+								Name: getName(restore),
 							},
 							Key: EnvAWSSecretAccessKey,
 						},
@@ -502,7 +502,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("restore-%s", restore.ObjectMeta.Name),
+			Name:      getName(restore),
 			Namespace: restore.ObjectMeta.Namespace,
 		},
 		Spec: corev1.PodSpec{
@@ -558,6 +558,11 @@ func getWebContainerFromDc(dc *osv1.DeploymentConfig) (corev1.Container, error) 
 		}
 	}
 	return corev1.Container{}, errors.Errorf("web container not found for dc %s", dc.ObjectMeta.Name)
+}
+
+// Helper function to get a resource name.
+func getName(restore *extensionv1.Restore) string {
+	return fmt.Sprintf("restore-%s", restore.ObjectMeta.Name)
 }
 
 // SetupWithManager sets up the controller with the Manager.
