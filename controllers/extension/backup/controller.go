@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -181,11 +181,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup) 
 		ImagePullPolicy: corev1.PullAlways,
 		Resources:       r.Params.ResourceRequirements,
 		WorkingDir:      r.Params.WorkingDir,
-		Command: []string{
-			"bash",
-			"-c",
-		},
-		Args: awscli.Command(cmd),
+		Command:         awscli.Command(cmd),
 		Env: []corev1.EnvVar{
 			{
 				Name: EnvAWSAccessKeyID,
