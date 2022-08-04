@@ -101,9 +101,11 @@ oc apply -f config/manager/deploy.yml
 1. Setup Permissions
 
 ```bash
-oc apply -f config/manager/namespace.yml
-oc apply -f config/crd/bases/
-oc apply -f config/rbac/
+CMD=$(crc console --credentials | grep kubeadmin | cut -d"'" -f2); ${CMD} \
+&& oc apply -f config/manager/namespace.yml \
+&& oc apply -f config/crd/bases/ \
+&& oc apply -f config/rbac/ \
+&& CMD=$(crc console --credentials | grep developer | cut -d"'" -f2); ${CMD}
 ```
 
 2. Run the Operator
