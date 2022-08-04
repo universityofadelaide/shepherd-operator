@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
 	corev1 "k8s.io/api/core/v1"
@@ -105,12 +106,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	secret, err := r.createSecret(ctx, backup, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
+	err := r.createSecret(ctx, backup, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
 	}
 
-	status, err := r.createPod(ctx, backup, secret)
+	status, err := r.createPod(ctx, backup)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Pod: %w", err)
 	}
@@ -126,10 +127,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 }
 
 // Creates Secret object based on the provided Spec configuration.
-func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backup, key, access string) (*corev1.Secret, error) {
+func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backup, key, access string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("backup-%s", backup.ObjectMeta.Name),
+			Name:      getName(backup),
 			Namespace: backup.ObjectMeta.Namespace,
 		},
 		Data: map[string][]byte{
@@ -139,18 +140,20 @@ func (r *Reconciler) createSecret(ctx context.Context, backup *extensionv1.Backu
 	}
 
 	if err := controllerutil.SetControllerReference(backup, secret, r.Scheme); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := r.Create(ctx, secret); client.IgnoreNotFound(err) != nil {
-		return nil, err
+	err := r.Create(ctx, secret)
+
+	if kerrors.IsAlreadyExists(err) {
+		return nil
 	}
 
-	return secret, nil
+	return err
 }
 
 // Creates Pod objects based on the provided Spec configuration.
-func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, secret *corev1.Secret) (extensionv1.BackupStatus, error) {
+func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup) (extensionv1.BackupStatus, error) {
 	cmd := awscli.CommandParams{
 		Endpoint:  r.Params.AWS.Endpoint,
 		Service:   "s3",
@@ -189,7 +192,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.ObjectMeta.Name,
+							Name: getName(backup),
 						},
 						Key: EnvAWSAccessKeyID,
 					},
@@ -200,7 +203,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.ObjectMeta.Name,
+							Name: getName(backup),
 						},
 						Key: EnvAWSSecretAccessKey,
 					},
@@ -229,7 +232,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("backup-%s", backup.ObjectMeta.Name),
+			Name:      getName(backup),
 			Namespace: backup.ObjectMeta.Namespace,
 		},
 		Spec: corev1.PodSpec{
@@ -377,6 +380,11 @@ func (r *Reconciler) updateStatus(ctx context.Context, log logr.Logger, backup *
 	backup.Status = status
 
 	return r.Status().Update(ctx, backup)
+}
+
+// Helper function to get a resource name.
+func getName(backup *extensionv1.Backup) string {
+	return fmt.Sprintf("backup-%s", backup.ObjectMeta.Name)
 }
 
 // SetupWithManager will setup the controller.
