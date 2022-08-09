@@ -158,7 +158,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// Requeue the operation for 15 seconds if the backup is still in progress.
 		logger.Info(fmt.Sprintf("Requeueing restore %s because the backup %s is In Progress", restore.ObjectMeta.Name, backup.ObjectMeta.Name))
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 15}, nil
-
 	}
 
 	// Catch-all for any other non Completed phases.
@@ -178,6 +177,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
+	if backup.Spec.Type == "" {
+		backup.Spec.Type = extensionv1.BackupTypeDefault
+	}
+
 	dcName := fmt.Sprintf("node-%s", restore.ObjectMeta.GetLabels()["environment"])
 
 	dc, err := r.OpenShift.DeploymentConfigs(restore.ObjectMeta.Namespace).Get(ctx, dcName, metav1.GetOptions{})
@@ -191,7 +194,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
 	}
 
-	status, err := r.createPod(ctx, restore, dc)
+	status, err := r.createPod(ctx, backup, restore, dc)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Pod: %w", err)
 	}
@@ -233,7 +236,7 @@ func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Rest
 }
 
 // Creates Pod objects based on the provided Spec configuration.
-func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore, dc *osv1.DeploymentConfig) (extensionv1.RestoreStatus, error) {
+func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, restore *extensionv1.Restore, dc *osv1.DeploymentConfig) (extensionv1.RestoreStatus, error) {
 	var initContainers []corev1.Container
 	var containers []corev1.Container
 
@@ -244,7 +247,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 			Service:   "s3",
 			Operation: "cp",
 			Args: []string{
-				fmt.Sprintf("s3://%s/%s/%s/mysql/%s.sql", r.Params.AWS.BucketName, restore.ObjectMeta.Namespace, restore.Spec.BackupName, mysqlName),
+				fmt.Sprintf("s3://%s/%s/%s/%s/mysql/%s.sql", r.Params.AWS.BucketName, backup.Spec.Type, restore.ObjectMeta.Namespace, restore.Spec.BackupName, mysqlName),
 				fmt.Sprintf("mysql/%s.sql", mysqlName),
 			},
 		}
@@ -385,7 +388,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 			Service:   "s3",
 			Operation: "cp",
 			Args: []string{
-				fmt.Sprintf("s3://%s/%s/%s/%s/", r.Params.AWS.BucketName, restore.ObjectMeta.Namespace, restore.Spec.BackupName, volumeName),
+				fmt.Sprintf("s3://%s/%s/%s/%s/%s/", r.Params.AWS.BucketName, backup.Spec.Type, restore.ObjectMeta.Namespace, restore.Spec.BackupName, volumeName),
 				fmt.Sprintf("%s/volume/%s/", r.Params.WorkingDir, volumeName),
 			},
 		}

@@ -22,11 +22,18 @@ import (
 	shpmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 )
 
+const (
+	// BackupTypeDefault is used as a fallback when no type is provided.
+	BackupTypeDefault = "system"
+)
+
 // BackupSpec defines the desired state of Backup
 type BackupSpec struct {
+	// Type of backup. Used to inform S3 URI and Shepherd UI components.
+	Type string `json:"type,omitempty"`
 	// Volumes which will be backed up.
 	Volumes map[string]shpmetav1.SpecVolume `json:"volumes,omitempty"`
-	// MySQL databases which will be backed up.
+	// MySQL database which will be backed up.
 	MySQL map[string]shpmetav1.SpecMySQL `json:"mysql,omitempty"`
 }
 

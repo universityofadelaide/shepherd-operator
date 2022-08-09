@@ -3,7 +3,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: shepherd-operator-manager
+  name: manager-role
 rules:
 - apiGroups:
   - apps.openshift.io
@@ -43,6 +43,24 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - batch
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - pods/status
+  verbs:
+  - get
 - apiGroups:
   - extension.shepherd
   resources:
@@ -159,16 +177,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - v1
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-- apiGroups:
-  - v1
-  resources:
-  - pods/log
-  verbs:
-  - get
