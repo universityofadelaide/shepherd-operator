@@ -387,10 +387,6 @@ func getName(backup *extensionv1.Backup) string {
 	return fmt.Sprintf("backup-%s", backup.ObjectMeta.Name)
 }
 
-func getBucketURI(bucket, prefix, namespace, name string) string {
-	return fmt.Sprintf("s3://%s/%s/%s", bucket, namespace, name)
-}
-
 // SetupWithManager will setup the controller.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
