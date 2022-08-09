@@ -106,6 +106,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
+	if backup.Spec.Type == "" {
+		backup.Spec.Type = extensionv1.BackupTypeDefault
+	}
+
 	err := r.createSecret(ctx, backup, r.Params.AWS.FieldKeyID, r.Params.AWS.FieldAccessKey)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create Secret: %w", err)
@@ -159,7 +163,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup) 
 		Service:   "s3",
 		Operation: "sync",
 		Args: []string{
-			".", fmt.Sprintf("s3://%s/%s/%s", r.Params.AWS.BucketName, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
+			".", fmt.Sprintf("s3://%s/%s/%s/%s", r.Params.AWS.BucketName, backup.Spec.Type, backup.ObjectMeta.Namespace, backup.ObjectMeta.Name),
 		},
 	}
 
