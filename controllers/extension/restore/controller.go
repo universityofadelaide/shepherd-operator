@@ -254,7 +254,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 			Image:      r.Params.AWS.Image,
 			Resources:  r.Params.ResourceRequirements,
 			WorkingDir: r.Params.WorkingDir,
-			Command:    awscli.Command(cmd),
+			Args:       awscli.Command(cmd),
 			Env: []corev1.EnvVar{
 				{
 					Name: EnvAWSAccessKeyID,
@@ -405,7 +405,7 @@ func (r *Reconciler) createPod(ctx context.Context, restore *extensionv1.Restore
 			Image:      r.Params.AWS.Image,
 			Resources:  r.Params.ResourceRequirements,
 			WorkingDir: r.Params.WorkingDir,
-			Command:    awscli.Command(cmd),
+			Args:       awscli.Command(cmd),
 			Env: []corev1.EnvVar{
 				{
 					Name: EnvAWSAccessKeyID,
