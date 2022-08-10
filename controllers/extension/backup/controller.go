@@ -249,6 +249,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup) 
 					},
 				},
 			},
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
