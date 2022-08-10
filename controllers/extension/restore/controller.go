@@ -386,7 +386,7 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 		cmd := awscli.CommandParams{
 			Endpoint:  r.Params.AWS.Endpoint,
 			Service:   "s3",
-			Operation: "cp",
+			Operation: "sync",
 			Args: []string{
 				fmt.Sprintf("s3://%s/%s/%s/%s/volume/%s/", r.Params.AWS.BucketName, backup.Spec.Type, restore.ObjectMeta.Namespace, restore.Spec.BackupName, volumeName),
 				fmt.Sprintf("%s/volume/%s/", r.Params.WorkingDir, volumeName),
