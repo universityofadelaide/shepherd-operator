@@ -516,7 +516,9 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 		return status, err
 	}
 
-	if err := r.Create(ctx, pod); client.IgnoreNotFound(err) != nil {
+	err = r.Create(ctx, pod)
+
+	if err != nil && !kerrors.IsAlreadyExists(err) {
 		return status, err
 	}
 
