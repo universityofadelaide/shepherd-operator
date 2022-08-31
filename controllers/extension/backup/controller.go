@@ -21,6 +21,7 @@ import (
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 	awscli "github.com/universityofadelaide/shepherd-operator/internal/aws/cli"
+	metautils "github.com/universityofadelaide/shepherd-operator/internal/k8s/metadata"
 	podutils "github.com/universityofadelaide/shepherd-operator/internal/k8s/pod"
 )
 
@@ -66,6 +67,8 @@ type Params struct {
 	MySQL MySQL
 	// AWS params used by this controller.
 	AWS AWS
+	// Used to filter Backup objects by a key and value pair.
+	FilterByLabelAndValue FilterByLabelAndValue
 }
 
 // MySQL params used by this controller.
@@ -81,6 +84,12 @@ type AWS struct {
 	FieldKeyID     string
 	FieldAccessKey string
 	Region         string
+}
+
+// FilterByLabelAndValue is used to filter Backup objects by a key and value pair.
+type FilterByLabelAndValue struct {
+	Key   string
+	Value string
 }
 
 //+kubebuilder:rbac:groups=batch,resources=pods,verbs=get;list;watch;create;update;patch;delete
@@ -99,6 +108,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if err := r.Get(ctx, req.NamespacedName, backup); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !metautils.HasLabelWithValue(backup.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		return reconcile.Result{}, nil
 	}
 
 	// Backup has completed or failed, return early.

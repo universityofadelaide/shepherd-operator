@@ -8,8 +8,14 @@ import (
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/sync/restore"
 )
 
+// Params used by sync controllers.
+type Params struct {
+	Restore restore.Params
+	Backup  backup.Params
+}
+
 // SetupWithManager attaches our controller to the manager.
-func SetupWithManager(mgr ctrl.Manager, osclient osv1client.AppsV1Interface) error {
+func SetupWithManager(mgr ctrl.Manager, params Params, osclient osv1client.AppsV1Interface) error {
 	if err := (&restore.Reconciler{
 		Client:    mgr.GetClient(),
 		OpenShift: osclient,

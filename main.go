@@ -39,6 +39,8 @@ import (
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/backupscheduled"
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/restore"
 	"github.com/universityofadelaide/shepherd-operator/controllers/extension/sync"
+	syncbackup "github.com/universityofadelaide/shepherd-operator/controllers/extension/sync/backup"
+	syncrestore "github.com/universityofadelaide/shepherd-operator/controllers/extension/sync/restore"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -117,6 +119,10 @@ func main() {
 				FieldAccessKey: os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_ACCESS_KEY"),
 				Region:         os.Getenv("SHEPHERD_OPERATOR_BACKUP_AWS_REGION"),
 			},
+			FilterByLabelAndValue: backup.FilterByLabelAndValue{
+				Key:   os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_KEY"),
+				Value: os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_VALUE"),
+			},
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", backup.ControllerName)
@@ -151,6 +157,10 @@ func main() {
 				FieldAccessKey: os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_ACCESS_KEY"),
 				Region:         os.Getenv("SHEPHERD_OPERATOR_RESTORE_AWS_REGION"),
 			},
+			FilterByLabelAndValue: restore.FilterByLabelAndValue{
+				Key:   os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_KEY"),
+				Value: os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_VALUE"),
+			},
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", restore.ControllerName)
@@ -161,12 +171,31 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(backupscheduled.ControllerName),
+		Params: backupscheduled.Params{
+			FilterByLabelAndValue: backupscheduled.FilterByLabelAndValue{
+				Key:   os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_KEY"),
+				Value: os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_VALUE"),
+			},
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", backupscheduled.ControllerName)
 		os.Exit(1)
 	}
 
-	if err := sync.SetupWithManager(mgr, osclient); err != nil {
+	if err := sync.SetupWithManager(mgr, sync.Params{
+		Restore: syncrestore.Params{
+			FilterByLabelAndValue: syncrestore.FilterByLabelAndValue{
+				Key:   os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_KEY"),
+				Value: os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_VALUE"),
+			},
+		},
+		Backup: syncbackup.Params{
+			FilterByLabelAndValue: syncbackup.FilterByLabelAndValue{
+				Key:   os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_KEY"),
+				Value: os.Getenv("SHEPHERD_OPERATOR_FILTER_LABEL_VALUE"),
+			},
+		},
+	}, osclient); err != nil {
 		setupLog.Error(err, "unable to create sync controller")
 		os.Exit(1)
 	}
