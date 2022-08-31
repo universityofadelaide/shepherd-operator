@@ -33,6 +33,7 @@ import (
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
 	shpdmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
+	metautils "github.com/universityofadelaide/shepherd-operator/internal/k8s/metadata"
 )
 
 const (
@@ -45,6 +46,19 @@ type Reconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Params   Params
+}
+
+// Params used by this controller.
+type Params struct {
+	// Used to filter Backup objects by a key and value pair.
+	FilterByLabelAndValue FilterByLabelAndValue
+}
+
+// FilterByLabelAndValue is used to filter Backup objects by a key and value pair.
+type FilterByLabelAndValue struct {
+	Key   string
+	Value string
 }
 
 //+kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
@@ -62,6 +76,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	err := r.Get(ctx, req.NamespacedName, sync)
 	if err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !metautils.HasLabelWithValue(sync.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		return reconcile.Result{}, nil
 	}
 
 	if sync.Status.Backup.Phase == shpdmetav1.PhaseCompleted || sync.Status.Backup.Phase == shpdmetav1.PhaseFailed {

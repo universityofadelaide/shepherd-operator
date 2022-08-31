@@ -27,6 +27,9 @@ func TestReconcile(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
+			Labels: map[string]string{
+				"shp_namespace": "test",
+			},
 		},
 		Spec: extensionv1.BackupSpec{},
 	}
@@ -53,6 +56,10 @@ func TestReconcile(t *testing.T) {
 				FieldKeyID:     "aws.key.id",
 				FieldAccessKey: "aws.access.key",
 				Region:         "ap-southeast-2",
+			},
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
 			},
 		},
 	}

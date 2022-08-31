@@ -25,6 +25,9 @@ func TestReconcile(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
+			Labels: map[string]string{
+				"shp_namespace": "test",
+			},
 		},
 		Spec: extensionv1.SyncSpec{
 			Site:       "2",
@@ -85,6 +88,12 @@ func TestReconcile(t *testing.T) {
 		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
+		Params: Params{
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
+			},
+		},
 	}
 
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{

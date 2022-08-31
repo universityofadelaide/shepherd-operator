@@ -40,6 +40,7 @@ import (
 	shpmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 	"github.com/universityofadelaide/shepherd-operator/internal/clock"
 	"github.com/universityofadelaide/shepherd-operator/internal/events"
+	metautils "github.com/universityofadelaide/shepherd-operator/internal/k8s/metadata"
 	scheduledutils "github.com/universityofadelaide/shepherd-operator/internal/scheduled"
 )
 
@@ -57,6 +58,19 @@ type Reconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Params   Params
+}
+
+// Params used by this controller.
+type Params struct {
+	// Used to filter Backup objects by a key and value pair.
+	FilterByLabelAndValue FilterByLabelAndValue
+}
+
+// FilterByLabelAndValue is used to filter Backup objects by a key and value pair.
+type FilterByLabelAndValue struct {
+	Key   string
+	Value string
 }
 
 //+kubebuilder:rbac:groups=extension.shepherd,resources=backups,verbs=get;list;watch;create;update;patch;delete
@@ -76,6 +90,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	err := r.Get(context.TODO(), req.NamespacedName, scheduled)
 	if err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !metautils.HasLabelWithValue(scheduled.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		return reconcile.Result{}, nil
 	}
 
 	if scheduled.Spec.Schedule.CronTab == "" {
