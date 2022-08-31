@@ -44,7 +44,8 @@ func TestReconcile(t *testing.T) {
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
 			Labels: map[string]string{
-				"site": "foo",
+				"site":          "foo",
+				"shp_namespace": "test",
 			},
 		},
 		Spec: extensionv1.BackupScheduledSpec{
@@ -92,6 +93,9 @@ func TestReconcileNoLabels(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
+			Labels: map[string]string{
+				"shp_namespace": "test",
+			},
 		},
 	}
 
@@ -105,6 +109,12 @@ func TestReconcileNoLabels(t *testing.T) {
 		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: mockevents.New(),
+		Params: Params{
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
+			},
+		},
 	}
 
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
@@ -122,7 +132,8 @@ func TestReconcileNoSchedule(t *testing.T) {
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
 			Labels: map[string]string{
-				"site": "foo",
+				"site":          "foo",
+				"shp_namespace": "test",
 			},
 		},
 	}
@@ -136,6 +147,12 @@ func TestReconcileNoSchedule(t *testing.T) {
 	rd := &Reconciler{
 		Client: fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme: scheme.Scheme,
+		Params: Params{
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
+			},
+		},
 	}
 
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
@@ -153,7 +170,8 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
 			Labels: map[string]string{
-				"site": "foo",
+				"site":          "foo",
+				"shp_namespace": "test",
 			},
 		},
 		Spec: extensionv1.BackupScheduledSpec{
@@ -175,6 +193,12 @@ func TestReconcileInvalidSchedule(t *testing.T) {
 		Client: fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme: scheme.Scheme,
 		Clock:  c,
+		Params: Params{
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
+			},
+		},
 	}
 
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
@@ -192,7 +216,8 @@ func TestReconcileInvalidDeadline(t *testing.T) {
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
 			Labels: map[string]string{
-				"site": "foo",
+				"site":          "foo",
+				"shp_namespace": "test",
 			},
 		},
 		Spec: extensionv1.BackupScheduledSpec{
@@ -214,6 +239,12 @@ func TestReconcileInvalidDeadline(t *testing.T) {
 		Client: fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme: scheme.Scheme,
 		Clock:  c,
+		Params: Params{
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
+			},
+		},
 	}
 
 	_, err = rd.Reconcile(context.TODO(), reconcile.Request{
@@ -233,7 +264,8 @@ func TestReconcileRetention(t *testing.T) {
 			Name:      "test",
 			Namespace: corev1.NamespaceDefault,
 			Labels: map[string]string{
-				"site": "foo",
+				"site":          "foo",
+				"shp_namespace": "test",
 			},
 		},
 		Spec: extensionv1.BackupScheduledSpec{
@@ -259,6 +291,12 @@ func TestReconcileRetention(t *testing.T) {
 		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
 		Scheme:   scheme.Scheme,
 		Recorder: recorder,
+		Params: Params{
+			FilterByLabelAndValue: FilterByLabelAndValue{
+				Key:   "shp_namespace",
+				Value: "test",
+			},
+		},
 	}
 
 	// increment the minute on each loop to trigger a new backup.
