@@ -21,6 +21,7 @@ func SetupWithManager(mgr ctrl.Manager, params Params, osclient osv1client.AppsV
 		OpenShift: osclient,
 		Recorder:  mgr.GetEventRecorderFor(restore.ControllerName),
 		Scheme:    mgr.GetScheme(),
+		Params:    params.Restore,
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}
@@ -29,6 +30,7 @@ func SetupWithManager(mgr ctrl.Manager, params Params, osclient osv1client.AppsV
 		Client:   mgr.GetClient(),
 		Recorder: mgr.GetEventRecorderFor(backup.ControllerName),
 		Scheme:   mgr.GetScheme(),
+		Params:   params.Backup,
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}
