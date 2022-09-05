@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -92,10 +93,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to get Kubernetes client")
+		os.Exit(1)
+	}
+
 	if err = (&backup.Reconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(backup.ControllerName),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor(backup.ControllerName),
+		ClientSet: clientset,
 		Params: backup.Params{
 			ResourceRequirements: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{

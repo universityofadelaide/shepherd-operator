@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clientfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -41,9 +42,10 @@ func TestReconcile(t *testing.T) {
 	}
 
 	rd := &Reconciler{
-		Client:   fake.NewClientBuilder().WithObjects(instance).Build(),
-		Scheme:   scheme.Scheme,
-		Recorder: mockevents.New(),
+		Client:    fake.NewClientBuilder().WithObjects(instance).Build(),
+		Scheme:    scheme.Scheme,
+		Recorder:  mockevents.New(),
+		ClientSet: clientfake.NewSimpleClientset(),
 		Params: Params{
 			ResourceRequirements: corev1.ResourceRequirements{},
 			WorkingDir:           "/tmp",
@@ -69,9 +71,7 @@ func TestReconcile(t *testing.T) {
 	})
 	assert.Nil(t, err)
 
-	list := &corev1.PodList{}
-	err = rd.Client.List(context.TODO(), list)
+	list, err := rd.ClientSet.CoreV1().Pods(query.Namespace).List(context.TODO(), metav1.ListOptions{})
 	assert.Nil(t, err)
-
 	assert.Equal(t, 1, len(list.Items))
 }
