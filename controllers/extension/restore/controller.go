@@ -140,6 +140,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Restore has completed or failed, return early.
+	if restore.Status.Phase == shpdmetav1.PhaseCompleted || restore.Status.Phase == shpdmetav1.PhaseFailed {
+		return reconcile.Result{}, nil
+	}
+
 	if !metautils.HasLabelWithValue(restore.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
 		return reconcile.Result{}, nil
 	}
@@ -219,7 +224,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	logger.Info("Reconcile finished")
 
-	return reconcile.Result{}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 15}, nil
 }
 
 // Creates Secret object based on the provided Spec configuration.
@@ -583,6 +588,5 @@ func getName(restore *extensionv1.Restore) string {
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&extensionv1.Restore{}).
-		Owns(&corev1.Pod{}).
 		Complete(r)
 }

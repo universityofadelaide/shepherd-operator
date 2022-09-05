@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/go-test/deep"
@@ -140,7 +141,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	logger.Info("Finished reconcile loop")
 
-	return ctrl.Result{}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 15}, nil
 }
 
 // Creates Secret object based on the provided Spec configuration.
@@ -407,6 +408,5 @@ func getName(backup *extensionv1.Backup) string {
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&extensionv1.Backup{}).
-		Owns(&corev1.Pod{}).
 		Complete(r)
 }
