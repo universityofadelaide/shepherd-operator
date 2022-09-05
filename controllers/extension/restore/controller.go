@@ -31,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -84,6 +85,7 @@ type Reconciler struct {
 	Config    *rest.Config
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
+	ClientSet kubernetes.Interface
 	Params    Params
 }
 
@@ -244,8 +246,7 @@ func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Rest
 		return err
 	}
 
-	err := r.Create(ctx, secret)
-
+	_, err := r.ClientSet.CoreV1().Secrets(secret.ObjectMeta.Namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if kerrors.IsAlreadyExists(err) {
 		return nil
 	}
@@ -534,16 +535,13 @@ func (r *Reconciler) createPod(ctx context.Context, backup *extensionv1.Backup, 
 		return status, err
 	}
 
-	err = r.Create(ctx, pod)
-
+	_, err = r.ClientSet.CoreV1().Pods(pod.ObjectMeta.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil && !kerrors.IsAlreadyExists(err) {
 		return status, err
 	}
 
-	if err := r.Get(ctx, types.NamespacedName{
-		Namespace: pod.ObjectMeta.Namespace,
-		Name:      pod.ObjectMeta.Name,
-	}, pod); err != nil {
+	pod, err = r.ClientSet.CoreV1().Pods(pod.ObjectMeta.Namespace).Get(ctx, pod.ObjectMeta.Name, metav1.GetOptions{})
+	if err != nil {
 		return status, err
 	}
 
