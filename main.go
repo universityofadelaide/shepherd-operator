@@ -142,6 +142,7 @@ func main() {
 		OpenShift: osclient,
 		Scheme:    mgr.GetScheme(),
 		Recorder:  mgr.GetEventRecorderFor(restore.ControllerName),
+		ClientSet: clientset,
 		Params: restore.Params{
 			ResourceRequirements: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
