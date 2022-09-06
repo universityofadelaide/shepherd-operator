@@ -94,6 +94,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			Labels: map[string]string{
 				"site":        sync.Spec.Site,
 				"environment": sync.Spec.BackupEnv,
+				"is-sync":     "1",
 			},
 		},
 		Spec: sync.Spec.BackupSpec,
