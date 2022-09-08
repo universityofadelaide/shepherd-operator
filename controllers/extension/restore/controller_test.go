@@ -2,7 +2,6 @@ package restore
 
 import (
 	"context"
-	shpmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	extensionv1 "github.com/universityofadelaide/shepherd-operator/apis/extension/v1"
+	shpmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 	mockevents "github.com/universityofadelaide/shepherd-operator/internal/events/mock"
 )
 
