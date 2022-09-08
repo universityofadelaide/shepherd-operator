@@ -2,6 +2,7 @@ package restore
 
 import (
 	"context"
+	shpmetav1 "github.com/universityofadelaide/shepherd-operator/apis/meta/v1"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -73,4 +74,24 @@ func TestReconcile(t *testing.T) {
 	found := &extensionv1.Restore{}
 	err = rd.Client.Get(context.TODO(), query, found)
 	assert.Nil(t, err)
+}
+
+func TestSkipBackup(t *testing.T) {
+	assert.False(t, skipBackup(&extensionv1.Backup{
+		Status: extensionv1.BackupStatus{
+			Phase: shpmetav1.PhaseCompleted,
+		},
+	}))
+
+	assert.False(t, skipBackup(&extensionv1.Backup{
+		Spec: extensionv1.BackupSpec{
+			Type: extensionv1.BackupTypeExternal,
+		},
+	}))
+
+	assert.True(t, skipBackup(&extensionv1.Backup{
+		Status: extensionv1.BackupStatus{
+			Phase: shpmetav1.PhaseInProgress,
+		},
+	}))
 }
