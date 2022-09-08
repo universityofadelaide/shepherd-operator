@@ -117,7 +117,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Backup has completed or failed, return early.
-	if backup.Status.Phase == shpdmetav1.PhaseCompleted || backup.Status.Phase == shpdmetav1.PhaseFailed {
+	if backup.Status.Phase == shpdmetav1.PhaseCompleted ||
+		backup.Status.Phase == shpdmetav1.PhaseFailed ||
+		backup.Spec.Type == extensionv1.BackupTypeExternal {
 		return reconcile.Result{}, nil
 	}
 

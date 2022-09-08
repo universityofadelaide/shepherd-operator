@@ -25,6 +25,8 @@ import (
 const (
 	// BackupTypeDefault is used as a fallback when no type is provided.
 	BackupTypeDefault = "system"
+	// BackupTypeExternal is used to define Backup objects where an external tool as performed the task.
+	BackupTypeExternal = "external"
 )
 
 // BackupSpec defines the desired state of Backup

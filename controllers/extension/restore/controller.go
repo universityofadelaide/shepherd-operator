@@ -181,7 +181,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Catch-all for any other non Completed phases.
-	if backup.Status.Phase != shpdmetav1.PhaseCompleted {
+	// Allow Backups when the type is external.
+	if skipBackup(backup) {
 		logger.Info(fmt.Sprintf("Skipping restore %s because the backup %s is in an unknown state: %s", restore.ObjectMeta.Name, backup.ObjectMeta.Name, backup.Status.Phase))
 		return reconcile.Result{}, nil
 	}
@@ -227,6 +228,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	logger.Info("Reconcile finished")
 
 	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 15}, nil
+}
+
+// Helper function to skip a backup.
+func skipBackup(backup *extensionv1.Backup) bool {
+	// Catch-all for any other non Completed phases.
+	// Allow Backups when the type is external.
+	if backup.Status.Phase != shpdmetav1.PhaseCompleted && backup.Spec.Type != extensionv1.BackupTypeExternal {
+		return true
+	}
+
+	return false
 }
 
 // Creates Secret object based on the provided Spec configuration.
