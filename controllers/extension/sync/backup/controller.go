@@ -95,6 +95,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				"site":        sync.Spec.Site,
 				"environment": sync.Spec.BackupEnv,
 				"is-sync":     "1",
+				// @todo, Looks at handling this nicer.
+				r.Params.FilterByLabelAndValue.Key: r.Params.FilterByLabelAndValue.Value,
 			},
 		},
 		Spec: sync.Spec.BackupSpec,
