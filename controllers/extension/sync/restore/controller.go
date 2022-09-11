@@ -25,6 +25,7 @@ import (
 	osv1 "github.com/openshift/api/apps/v1"
 	osv1client "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -129,8 +130,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, err
 	}
 
-	if err := r.Create(ctx, restore); client.IgnoreNotFound(err) != nil {
-		return reconcile.Result{}, err
+	err = r.Create(ctx, restore)
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		return ctrl.Result{}, err
 	}
 
 	if err = r.Get(ctx, types.NamespacedName{

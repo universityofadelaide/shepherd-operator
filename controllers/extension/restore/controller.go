@@ -259,8 +259,8 @@ func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Rest
 	}
 
 	_, err := r.ClientSet.CoreV1().Secrets(secret.ObjectMeta.Namespace).Create(ctx, secret, metav1.CreateOptions{})
-	if kerrors.IsAlreadyExists(err) {
-		return nil
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		return err
 	}
 
 	return err

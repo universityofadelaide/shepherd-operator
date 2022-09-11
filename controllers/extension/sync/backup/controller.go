@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/go-test/deep"
 	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -108,8 +109,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	logger.Info("Syncing Backup")
 
-	if err := r.Create(ctx, backup); client.IgnoreNotFound(err) != nil {
-		return reconcile.Result{}, err
+	err = r.Create(ctx, backup)
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		return ctrl.Result{}, err
 	}
 
 	if err = r.Get(ctx, types.NamespacedName{
