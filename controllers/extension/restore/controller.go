@@ -263,7 +263,7 @@ func (r *Reconciler) createSecret(ctx context.Context, restore *extensionv1.Rest
 		return err
 	}
 
-	return err
+	return nil
 }
 
 // Creates Pod objects based on the provided Spec configuration.
