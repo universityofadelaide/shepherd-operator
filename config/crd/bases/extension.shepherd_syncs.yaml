@@ -16,8 +16,17 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.restorePhase
-      name: Status
+    - jsonPath: .status.Backup.startTime
+      name: Start Time
+      type: string
+    - jsonPath: .status.Restore.CompletionTime
+      name: Completion Time
+      type: string
+    - jsonPath: .status.Backup.Phase
+      name: Backup Phase
+      type: string
+    - jsonPath: .status.Restore.Phase
+      name: Restore Phase
       type: string
     name: v1
     schema:
