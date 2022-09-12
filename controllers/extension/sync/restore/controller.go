@@ -77,6 +77,8 @@ type FilterByLabelAndValue struct {
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	logger.Info("Starting reconcile loop")
+
 	sync := &extensionv1.Sync{}
 
 	err := r.Get(ctx, req.NamespacedName, sync)
@@ -85,6 +87,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if !metautils.HasLabelWithValue(sync.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		logger.Info("Skipping. Sync does not have correct labels for this operator.", "namespace", sync.ObjectMeta.Namespace, "name", sync.ObjectMeta.Name, "key", r.Params.FilterByLabelAndValue.Key, "value", r.Params.FilterByLabelAndValue.Value)
 		return reconcile.Result{}, nil
 	}
 
