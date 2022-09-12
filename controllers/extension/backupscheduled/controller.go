@@ -87,12 +87,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	scheduled := &extensionv1.BackupScheduled{}
 
-	err := r.Get(context.TODO(), req.NamespacedName, scheduled)
+	err := r.Get(ctx, req.NamespacedName, scheduled)
 	if err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if !metautils.HasLabelWithValue(scheduled.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		logger.Info("Skipping. BackupScheduled does not have correct labels for this operator.", "namespace", scheduled.ObjectMeta.Namespace, "name", scheduled.ObjectMeta.Name, "key", r.Params.FilterByLabelAndValue.Key, "value", r.Params.FilterByLabelAndValue.Value)
 		return reconcile.Result{}, nil
 	}
 

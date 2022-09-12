@@ -148,6 +148,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if !metautils.HasLabelWithValue(restore.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		logger.Info("Skipping. Restore does not have correct labels for this operator.", "namespace", restore.ObjectMeta.Namespace, "name", restore.ObjectMeta.Name, "key", r.Params.FilterByLabelAndValue.Key, "value", r.Params.FilterByLabelAndValue.Value)
 		return reconcile.Result{}, nil
 	}
 

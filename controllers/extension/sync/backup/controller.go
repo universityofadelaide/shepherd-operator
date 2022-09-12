@@ -72,6 +72,8 @@ type FilterByLabelAndValue struct {
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	logger.Info("Starting reconcile loop")
+
 	sync := &extensionv1.Sync{}
 
 	err := r.Get(ctx, req.NamespacedName, sync)
@@ -80,11 +82,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if !metautils.HasLabelWithValue(sync.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		logger.Info("Skipping. Sync does not have correct labels for this operator.", "namespace", sync.ObjectMeta.Namespace, "name", sync.ObjectMeta.Name, "key", r.Params.FilterByLabelAndValue.Key, "value", r.Params.FilterByLabelAndValue.Value)
 		return reconcile.Result{}, nil
 	}
 
 	if sync.Status.Backup.Phase == shpdmetav1.PhaseCompleted || sync.Status.Backup.Phase == shpdmetav1.PhaseFailed {
-		logger.Info("Skipping. Backup has finished.", "name", sync.Status.Backup.Name, "phase", sync.Status.Backup.Phase)
+		logger.Info("Skipping. Backup has finished.", "namespace", sync.ObjectMeta.Namespace, "name", sync.Status.Backup.Name, "phase", sync.Status.Backup.Phase)
 		return reconcile.Result{}, nil
 	}
 
@@ -132,7 +135,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		sync.Status.Backup = status
 
-		err := r.Status().Update(ctx, backup)
+		err := r.Status().Update(ctx, sync)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed to update status")
 		}

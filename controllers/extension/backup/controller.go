@@ -113,6 +113,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if !metautils.HasLabelWithValue(backup.ObjectMeta.Labels, r.Params.FilterByLabelAndValue.Key, r.Params.FilterByLabelAndValue.Value) {
+		logger.Info("Skipping. Backup does not have correct labels for this operator.", "namespace", backup.ObjectMeta.Namespace, "name", backup.ObjectMeta.Name, "key", r.Params.FilterByLabelAndValue.Key, "value", r.Params.FilterByLabelAndValue.Value)
 		return reconcile.Result{}, nil
 	}
 
