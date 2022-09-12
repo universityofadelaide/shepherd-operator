@@ -54,7 +54,10 @@ type SyncStatusRestore struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Status",type=string,JSONPath=.status.restorePhase
+//+kubebuilder:printcolumn:name="Start Time",type=string,JSONPath=.status.Backup.startTime
+//+kubebuilder:printcolumn:name="Completion Time",type=string,JSONPath=.status.Restore.CompletionTime
+//+kubebuilder:printcolumn:name="Backup Phase",type=string,JSONPath=.status.Backup.Phase
+//+kubebuilder:printcolumn:name="Restore Phase",type=string,JSONPath=.status.Restore.Phase
 
 // Sync is the Schema for the syncs API
 type Sync struct {
